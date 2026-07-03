@@ -15,8 +15,8 @@ import win32gui
 
 # ── Parámetros ajustables ─────────────────────────────────────────────────────
 INTERVALO = 30          # cada cuántos seg revisa la ventana activa
-UMBRAL_ATASCO = 12 * 60  # seg en la MISMA ventana para considerar "atascado"
-COOLDOWN = 45 * 60       # no volver a ofrecer ayuda tan pronto
+UMBRAL_ATASCO = 8 * 60   # seg en la MISMA ventana para considerar "atascado" (subido: ayuda antes)
+COOLDOWN = 30 * 60       # no volver a ofrecer ayuda tan pronto
 
 _pausado = False
 _titulo = ""            # título de la ventana activa que venimos observando

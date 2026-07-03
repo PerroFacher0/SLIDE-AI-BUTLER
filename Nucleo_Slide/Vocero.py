@@ -18,8 +18,8 @@ import time
 from collections import deque
 
 # ── Parámetros ajustables ─────────────────────────────────────────────────────
-MAX_POR_HORA = 5      # tope GLOBAL de intervenciones proactivas por hora
-GAP_MINIMO = 90       # segundos mínimos entre dos intervenciones proactivas
+MAX_POR_HORA = 8      # tope GLOBAL de intervenciones proactivas por hora (subido: más presente)
+GAP_MINIMO = 60       # segundos mínimos entre dos intervenciones proactivas
 
 _lock = threading.RLock()
 _marcas = deque(maxlen=MAX_POR_HORA)   # timestamps de lo dicho en la última hora

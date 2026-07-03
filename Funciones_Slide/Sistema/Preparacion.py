@@ -12,7 +12,7 @@ import time
 import win32gui
 
 INTERVALO = 20
-COOLDOWN = 3 * 3600     # como mucho, una preparación cada 3h
+COOLDOWN = 90 * 60      # como mucho, una preparación cada 1.5h (subido: más presente)
 
 _APPS_TRABAJO = (
     "code", "word", "excel", "powerpoint", "onenote", "obsidian", "notion", "docs",

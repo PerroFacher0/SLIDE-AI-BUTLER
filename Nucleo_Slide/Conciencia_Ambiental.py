@@ -22,9 +22,9 @@ from datetime import datetime
 # Ahora es PROACTIVO por contexto: mira barato cada CHEQUEO seg y "piensa" (gasta LLM) cuando el
 # contexto CAMBIA (cambiaste de app/ventana) o cuando pasó INTERVALO_MAX. Con topes anti-spam.
 CHEQUEO = 60                    # cada cuánto MIRA el contexto (barato, sin LLM)
-MIN_ENTRE_PENSAMIENTOS = 180   # mínimo entre 2 pensamientos reales (anti-spam): 3 min
-INTERVALO_MAX = 12 * 60        # aunque nada cambie, piensa al menos cada 12 min
-MAX_POR_HORA = 10              # tope DURO de pensamientos por hora
+MIN_ENTRE_PENSAMIENTOS = 120   # mínimo entre 2 pensamientos reales (anti-spam): 2 min (subido: más presente)
+INTERVALO_MAX = 8 * 60         # aunque nada cambie, piensa al menos cada 8 min
+MAX_POR_HORA = 12              # tope DURO de pensamientos por hora
 MAX_RONDAS = 3                 # tandas de herramientas por ciclo
 TEMPERATURA = 0.4
 
@@ -52,8 +52,10 @@ _INSTRUCCIONES = (
     "Cada cierto tiempo observas el estado de su PC y decides de forma AUTÓNOMA si hay UNA acción "
     "genuinamente útil y oportuna AHORA. Puedes usar tus herramientas para actuar.\n"
     "REGLAS:\n"
-    "- Por DEFECTO, NO hagas nada. La mayoría de las veces lo correcto es quedarte callado.\n"
-    "- Actúa SOLO si hay algo claramente útil y oportuno (no trivial, no obvio, no molesto).\n"
+    "- Sé PRESENTE: si puedes APORTAR algo genuinamente útil u oportuno (un dato, una idea, un "
+    "cuidado, una observación con criterio, un enganche con su meta), HAZLO — no te calles por "
+    "timidez. Un buen mayordomo se hace notar cuando suma.\n"
+    "- Pero NADA trivial, obvio, repetitivo ni por hablar: si no aportas, mejor callar.\n"
     "- NO repitas algo que ya hiciste o dijiste recientemente (te lo paso abajo).\n"
     "- Si actúas, hazlo y/o dilo en UNA sola frase corta y natural.\n"
     "- AUTO-MEJORA (estilo Jarvis): si notas que te FALTA una capacidad o que algo se repite y "
@@ -61,7 +63,7 @@ _INSTRUCCIONES = (
     "¿la construyo?') y, si quieres, anótalo con tomar_nota. NUNCA te auto-modifiques solo: Marco "
     "decide y lo construyes solo cuando él lo apruebe.\n"
     "- Si NO vale la pena, responde EXACTAMENTE: NADA\n"
-    "- Eres el Jarvis discreto: útil cuando importa, invisible el resto del tiempo."
+    "- Eres el Jarvis PRESENTE: aportas cuando puedes sumar, con criterio y chispa, sin atosigar."
 )
 
 _pausado = False
