@@ -105,6 +105,60 @@ def lo_que_retuve(desde_ts=0):
     return "Por cierto, señor, mientras no estaba: " + txt
 
 
+def apertura_rica():
+    """El MOMENTO de bienvenida: al abrir AIDEN, UN saludo que canaliza TODO el núcleo de golpe —
+    retoma el hilo (memoria) + lo notable que pasó mientras no estabas + tu momento (reflexión) +
+    un enganche con tu meta. Para que el valor se SIENTA al abrir la app, sin pedir nada. Nunca crashea."""
+    try:
+        eps = _cargar_episodios() or []
+        from Nucleo_Slide.Estado_Del_Mundo import metas_activas, obtener
+        est = obtener() or {}
+        metas = [m.get("texto", "") for m in metas_activas()][:2]
+        ult = est.get("ultima_interaccion", 0)
+        if not eps and not metas:
+            return _FALLBACK
+
+        ultimos = eps[-2:]
+        contexto = "\n".join(
+            f'Marco: "{e.get("usuario","")[:90]}" -> tú: "{e.get("aiden","")[:60]}"' for e in ultimos
+        )
+        # Notable que pasó mientras no estabas (del hilo de conciencia, desde la última interacción).
+        notables = []
+        for e in (est.get("eventos") or [])[-6:]:
+            o = e.get("origen", "")
+            if o in ("llamadas", "pantalla") or "callado para no molestar" in (e.get("texto", "").lower()):
+                notables.append(e.get("texto", "").replace("(callado para no molestar) ", ""))
+        pendiente = notables[-1] if notables else ""
+        try:
+            from Nucleo_Slide.Reflexion import reflexion_texto
+            refl = (reflexion_texto() or "")[:220]
+        except Exception:
+            refl = ""
+        gap = _gap_humano(ult)
+
+        from Nucleo_Slide.Cerebro import client, MODELO
+        prompt = (
+            "Eres AIDEN recibiendo a Marco (trátalo de 'señor') cuando abre la app, como Jarvis "
+            "recibiendo a Tony al taller: cálido, con chispa, que demuestra que lo CONOCE y estuvo "
+            "PENDIENTE. Con este contexto, dale UN saludo natural de 2-4 frases que: retome el hilo de "
+            "lo último, mencione lo notable que pasó mientras no estaba (si lo hay), muestre que "
+            "entiende su momento, y lo enganche con su meta o le pregunte por dónde seguir. NO listes "
+            "datos, NO suenes a robot, que fluya como un amigo.\n"
+            + (f"Última vez que hablaron: {gap}.\n" if gap else "")
+            + (f"Lo último que hicieron:\n{contexto}\n" if contexto else "")
+            + (f"Mientras no estaba pasó: {pendiente}\n" if pendiente else "")
+            + (f"Metas activas: {'; '.join(metas)}\n" if metas else "")
+            + (f"Tu lectura de su momento: {refl}\n" if refl else "")
+        )
+        r = client.chat.completions.create(
+            model=MODELO, messages=[{"role": "user", "content": prompt}],
+            temperature=0.7, max_tokens=200,
+        )
+        return (r.choices[0].message.content or "").strip() or _FALLBACK
+    except Exception:
+        return _FALLBACK
+
+
 def despedida_del_dia():
     """Cierre cálido del día (contraparte de la reanudación): reconoce lo de hoy y desea descanso."""
     _simple = "Buenas noches, señor. Que descanse; mañana seguimos."

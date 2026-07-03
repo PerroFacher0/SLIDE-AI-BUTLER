@@ -55,7 +55,7 @@ from Funciones_Slide.Sistema.Vigilante_Reunion import iniciar_vigilante_reunion
 from Nucleo_Slide.Conciencia_Ambiental import iniciar_conciencia_ambiental
 from Nucleo_Slide.Perfil_Marco import iniciar_perfil
 from Funciones_Slide.Productividad.Seguimiento_Metas import iniciar_seguimiento_metas
-from Nucleo_Slide.Compania import saludo_de_reanudacion, despedida_del_dia
+from Nucleo_Slide.Compania import apertura_rica, despedida_del_dia
 from Nucleo_Slide.Reflexion import iniciar_reflexion
 from Nucleo_Slide.Memoria_RAG import iniciar_rag
 from Funciones_Slide.Sistema.Co_Ingeniero import iniciar_co_ingeniero
@@ -232,7 +232,7 @@ if verificacion != "Bienvenido Marco":
     sys.exit(0)
 
 # Login OK: briefing + arranque de hilos de fondo (todo una sola vez).
-hablado_del_asistente(saludo_de_reanudacion())   # saludo que RETOMA el hilo, no en frío
+hablado_del_asistente(apertura_rica())   # apertura que canaliza TODO el núcleo (memoria+pendiente+meta+momento)
 hablado_del_asistente(briefing())
 _n_notis = contar_actividad()
 if _n_notis > 0:
