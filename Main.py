@@ -40,6 +40,7 @@ from Nucleo_Slide.Reflexion import iniciar_reflexion
 from Nucleo_Slide.Memoria_RAG import iniciar_rag
 from Funciones_Slide.Sistema.Co_Ingeniero import iniciar_co_ingeniero
 from Funciones_Slide.Sistema.Preparacion import iniciar_preparacion
+from Funciones_Slide.Info.Finanzas_Gastos import iniciar_vigilante_gastos
 iniciar_hilos()
 
 
@@ -223,6 +224,7 @@ if verificacion == "Bienvenido Marco":
     iniciar_rag()                                      # memoria semántica (búsqueda por significado)
     iniciar_co_ingeniero(hablado_del_asistente)        # te ofrece ayuda al verte atascado (taller)
     iniciar_preparacion(hablado_del_asistente)         # "me tomé la libertad de..." prepara tu contexto
+    iniciar_vigilante_gastos()                         # captura tus gastos de las notis de Nequi/Nu (auto)
     ejecutar_slide(funcion_texto=Procesar_Peticion, funcion_voz=Voz)
     
     while Activado: 
