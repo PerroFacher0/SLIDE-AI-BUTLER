@@ -17,3 +17,13 @@ PORTAFOLIO = {
 # Para que AIDEN hable dentro de las llamadas: instala VB-CABLE y pon aqui el nombre
 # del dispositivo (ej. "CABLE Input"). Deja None si no lo usas.
 DISPOSITIVO_LLAMADA = None
+
+# GASTOS via BELVO (para que AIDEN lea tus movimientos de Nequi y Nu). Pasos:
+#   1. Crea cuenta en https://belvo.com (dashboard). Copia tus Secret Keys.
+#   2. Enlaza tus cuentas (Nequi y Nu) con Belvo Connect -> te da un 'link' por cuenta.
+#   3. Rellena aqui. Si tienes dos links, ponlos separados por coma: "linkNequi,linkNu".
+# Deja "" (vacio) si aun no lo usas; la herramienta mis_gastos te avisara que falta configurar.
+BELVO_SECRET_ID       = ""
+BELVO_SECRET_PASSWORD = ""
+BELVO_LINK            = ""
+BELVO_BASE            = "https://sandbox.belvo.com"   # cambia a https://api.belvo.com en produccion

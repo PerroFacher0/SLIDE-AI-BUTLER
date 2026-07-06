@@ -13,6 +13,7 @@ from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
 from Funciones_Slide.Info.Investigacion import investigar
+from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
 from Funciones_Slide.Productividad.Protocolos import activar_protocolo
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
@@ -789,6 +790,20 @@ tools = [
                 "required": ["tema"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mis_gastos",
+            "description": "Reporta cuánto ha GASTADO Marco (de sus cuentas Nequi y Nu, leídas vía Belvo). Úsala cuando pregunte '¿cuánto llevo gastado?', '¿cuánto gasté este mes/semana/hoy?', 'mis gastos'. Distinta de mis_acciones/consultar_accion (eso es inversiones, no gasto diario).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "periodo": {"type": "string", "description": "mes (por defecto) | semana | hoy"}
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -843,4 +858,5 @@ tools_map = {
     "ejecutar_mision": ejecutar_mision,
     "recordar_a_fondo": recordar_a_fondo,
     "investigar": investigar,
+    "mis_gastos": mis_gastos,
 }
