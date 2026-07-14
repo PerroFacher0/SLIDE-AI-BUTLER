@@ -239,6 +239,15 @@ def _instrucciones_completas(consulta=""):
             base += "\n\n" + tono
     except Exception:
         pass
+    # PREFERENCIAS APRENDIDAS: reglas que Marco te ha enseñado corrigiéndote. Van AL FINAL (máxima
+    # prioridad) porque son órdenes explícitas suyas sobre cómo comportarte.
+    try:
+        from Nucleo_Slide.Aprendizaje import preferencias_texto
+        prefs = preferencias_texto()
+        if prefs:
+            base += "\n\n" + prefs
+    except Exception:
+        pass
     return base
 
 
@@ -518,6 +527,12 @@ def proceso_de_ia(texto_de_whisper):
 
     # Guarda este intercambio en la memoria episódica (para recordarlo en el futuro).
     registrar_episodio(texto_de_whisper, texto_final, origen="voz")
+    # APRENDIZAJE: si Marco corrigió/expresó una preferencia, apréndela (en 2do plano, sin latencia).
+    try:
+        from Nucleo_Slide.Aprendizaje import aprender_de
+        aprender_de(texto_de_whisper)
+    except Exception:
+        pass
     # Y en la CONCIENCIA COMPARTIDA, para que el resto de AIDEN sepa qué se acaba de hablar.
     try:
         from Nucleo_Slide.Estado_Del_Mundo import registrar_evento, marcar_interaccion
@@ -604,6 +619,11 @@ def procesar_remoto(texto):
 
         _memoria_remota = _recortar_memoria(_memoria_remota)
         registrar_episodio(str(texto), texto_final, origen="telegram")
+        try:
+            from Nucleo_Slide.Aprendizaje import aprender_de
+            aprender_de(str(texto))
+        except Exception:
+            pass
         try:
             from Nucleo_Slide.Estado_Del_Mundo import registrar_evento, marcar_interaccion
             registrar_evento(f"Por Telegram, Marco: {str(texto)} — AIDEN: {texto_final}", "telegram")
