@@ -111,6 +111,13 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
     if p.strip(" ?¿") in _PEDIR_ESTADO:
         return ("estado", None)
 
+    # MODO TALLER (copiloto de pantalla): entrar/salir sin gastar LLM.
+    if any(k in p for k in ("acompaname", "modo taller", "trabajemos juntos", "trabaja conmigo")):
+        return ("taller_on", None)
+    if any(k in p for k in ("ya terminamos", "cierra el taller", "sal del taller",
+                            "deja de acompanarme", "trabajo solo")):
+        return ("taller_off", None)
+
     if llamada_activa and any(k in p for k in ("contesta", "responde", "atiende", "contestar")):
         return ("contestar", original)
 
@@ -139,6 +146,15 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
         return ("codigo", None)
 
     return ("llm", original)
+
+
+def _cerrar_taller_silencioso():
+    # Al descansar o despedir el día, la sesión de taller (si la hay) se cierra sola.
+    try:
+        from Funciones_Slide.Sistema.Taller import detener_taller
+        detener_taller(silencioso=True)
+    except Exception:
+        pass
 
 
 def Procesar_Peticion(texto, ventana):
@@ -178,6 +194,12 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
             respuesta_slide = _informe_estado()
+        elif tipo == "taller_on":
+            from Funciones_Slide.Sistema.Taller import modo_taller
+            respuesta_slide = modo_taller("iniciar")
+        elif tipo == "taller_off":
+            from Funciones_Slide.Sistema.Taller import detener_taller
+            respuesta_slide = detener_taller()
         elif tipo == "quedate":
             ventana.pedir_fijar.emit(True)
             respuesta_slide = random.choice(_R_QUEDATE)
@@ -192,11 +214,13 @@ def Procesar_Peticion(texto, ventana):
         elif tipo == "buenas_noches":
             # Fin del DÍA (no solo ocultar): despedida cálida que reconoce tu día + se oculta.
             _manos_libres = False
+            _cerrar_taller_silencioso()
             respuesta_slide = despedida_del_dia()
             ventana.pedir_fijar.emit(False)
             ventana.pedir_ocultar.emit()
         elif tipo == "descansa":
             _manos_libres = False
+            _cerrar_taller_silencioso()
             ventana.pedir_fijar.emit(False)
             ventana.pedir_ocultar.emit()
             respuesta_slide = random.choice(_R_DESCANSA)

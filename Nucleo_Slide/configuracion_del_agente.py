@@ -14,7 +14,8 @@ from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
 from Funciones_Slide.Info.Investigacion import investigar
 from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
-from Funciones_Slide.Productividad.Protocolos import activar_protocolo
+from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_protocolo
+from Funciones_Slide.Sistema.Taller import modo_taller
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -804,6 +805,37 @@ tools = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "crear_protocolo",
+            "description": "Marco te ENSEÑA una rutina personalizada con nombre ('crea un protocolo modo estudio: cierra YouTube, abre Notion y pon lo-fi'). Queda guardada PARA SIEMPRE y luego se dispara con activar_protocolo. Con eliminar=true la borras. NO es para ejecutar nada ahora: solo aprende la rutina.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre": {"type": "string", "description": "Nombre corto del protocolo (ej. 'modo estudio')."},
+                    "pasos": {"type": "string", "description": "Los pasos a ejecutar cuando se active, en lenguaje natural y en orden."},
+                    "eliminar": {"type": "boolean", "description": "true para BORRAR el protocolo (no hace falta 'pasos')."}
+                },
+                "required": ["nombre"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "modo_taller",
+            "description": "Sesión de COPILOTO: acompañas a Marco mirando su pantalla mientras trabaja (como Jarvis en el taller de Tony) y comentas solo cuando aportas. Úsala cuando diga 'acompáñame', 'trabajemos juntos', 'quédate mirando esto' (accion=iniciar) o 'ya terminamos', 'cierra el taller' (accion=parar).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "iniciar (por defecto) | parar"},
+                    "minutos": {"type": "integer", "description": "Duración de la sesión (0 u omitido = 45 min)."}
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -859,4 +891,6 @@ tools_map = {
     "recordar_a_fondo": recordar_a_fondo,
     "investigar": investigar,
     "mis_gastos": mis_gastos,
+    "crear_protocolo": crear_protocolo,
+    "modo_taller": modo_taller,
 }

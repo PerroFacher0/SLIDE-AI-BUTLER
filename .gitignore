@@ -15,6 +15,7 @@ reflexion.json
 gastos.json
 preferencias.json
 conversacion.json
+protocolos.json
 AIDEN_log.txt
 secretos.py
 notas.txt
