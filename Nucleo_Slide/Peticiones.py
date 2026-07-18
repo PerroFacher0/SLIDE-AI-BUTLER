@@ -51,9 +51,36 @@ _R_MANOS_OFF = ("Modo manos libres desactivado, señor. Volveré a esperar la pa
                 "Entendido, vuelvo a lo discreto: me llama con la palabra clave.")
 
 
+# "¿Estado?" estilo Iron Man: reporte instantáneo SIN LLM. Solo frases exactas (no
+# secuestrar "estado de mi cuenta...", que va al cerebro).
+_PEDIR_ESTADO = {"estado", "status", "reporte", "informe", "como vamos", "como estamos",
+                 "reporte de estado", "estado del sistema", "dame el estado", "dame un reporte"}
+
+
+def _informe_estado():
+    # Reporte crisp: sistemas + dónde está Marco + metas. Todo local, cero LLM.
+    partes = ["En línea, señor."]
+    try:
+        from Funciones_Slide.Sistema.Funciones_Sistema import estado_sistema
+        partes.append(str(estado_sistema()))
+    except Exception:
+        pass
+    try:
+        from Nucleo_Slide.Estado_Del_Mundo import obtener
+        est = obtener()
+        if est.get("foco_actual"):
+            partes.append(f"Su foco: {est['foco_actual']}.")
+        metas = [m for m in est.get("metas", []) if m.get("estado") != "hecha"]
+        if metas:
+            partes.append(f"Sigo {len(metas)} meta{'s' if len(metas) > 1 else ''} suya{'s' if len(metas) > 1 else ''}.")
+    except Exception:
+        pass
+    return " ".join(p for p in partes if p)
+
+
 def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
     """Enrutado PURO de los atajos sin LLM. Devuelve (tipo, dato) donde tipo es uno de:
-    'abrir', 'whatsapp', 'musica', 'contestar', 'quedate', 'manos_on', 'manos_off',
+    'abrir', 'whatsapp', 'musica', 'contestar', 'estado', 'quedate', 'manos_on', 'manos_off',
     'buenas_noches', 'descansa', 'codigo', 'llm'. Sin efectos secundarios (testeable)."""
     original = str(texto or "").strip().lower()
     p = _plano(original)
@@ -80,6 +107,9 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
 
     if p in _MAPA_MUSICA:
         return ("musica", _MAPA_MUSICA[p])
+
+    if p.strip(" ?¿") in _PEDIR_ESTADO:
+        return ("estado", None)
 
     if llamada_activa and any(k in p for k in ("contesta", "responde", "atiende", "contestar")):
         return ("contestar", original)
@@ -146,6 +176,8 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = control_musica(dato)
         elif tipo == "contestar":
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
+        elif tipo == "estado":
+            respuesta_slide = _informe_estado()
         elif tipo == "quedate":
             ventana.pedir_fijar.emit(True)
             respuesta_slide = random.choice(_R_QUEDATE)

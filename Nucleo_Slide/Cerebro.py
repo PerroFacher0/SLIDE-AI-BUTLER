@@ -8,6 +8,7 @@ from Nucleo_Slide.Memoria_Episodica import registrar_episodio, recordar_relevant
 from Funciones_Slide.Info.Experto import MODELO_EXPERTO   # gemini-2.5-pro (para el escalado)
 from Voz_Slide.Herramientas_del_asistente import hablado_del_asistente
 import json
+import os
 from openai import OpenAI
 import ast
 import threading
@@ -68,7 +69,46 @@ _FRASES_INSEGURAS = (
 )
 
 
-memoria = []
+# ── CONVERSACIÓN CONTINUA (sobrevive reinicios) ───────────────────────────────
+# Jarvis no "nace de cero" cada arranque: si AIDEN se reinicia (crash, update, apagón) a media
+# charla, retoma el hilo donde iba. Se persisten solo los turnos de TEXTO (user/assistant, sin
+# tool_calls) y solo se restauran si la charla es RECIENTE (< _CONV_MAX_H horas); si no, día nuevo,
+# conversación nueva (la apertura rica ya hace ese puente).
+_RUTA_CONV = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "conversacion.json"
+)
+_CONV_MAX_H = 6
+
+
+def _cargar_conversacion():
+    try:
+        if os.path.exists(_RUTA_CONV):
+            with open(_RUTA_CONV, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and time.time() - d.get("t", 0) < _CONV_MAX_H * 3600:
+                msgs = [m for m in d.get("mensajes", [])
+                        if m.get("role") in ("user", "assistant")
+                        and isinstance(m.get("content"), str) and m["content"]]
+                if msgs:
+                    print(f"[conversacion] retomo el hilo: {len(msgs)} mensajes recientes")
+                return msgs[-12:]
+    except Exception:
+        pass
+    return []
+
+
+def _guardar_conversacion():
+    try:
+        msgs = [m for m in memoria
+                if m.get("role") in ("user", "assistant") and not m.get("tool_calls")
+                and isinstance(m.get("content"), str) and m["content"]]
+        with open(_RUTA_CONV, "w", encoding="utf-8") as f:
+            json.dump({"t": time.time(), "mensajes": msgs[-12:]}, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+
+memoria = _cargar_conversacion()
 
 # Bandera: queda True si el usuario interrumpio a AIDEN en la ultima respuesta.
 # Main la lee para escuchar al usuario de inmediato (sin repetir la palabra clave).
@@ -281,6 +321,21 @@ def _confirmacion():
     return random.choice(_CONFIRMACIONES)
 
 
+# MURMULLO DE TRABAJO: si la respuesta va a TARDAR (herramienta lenta) y AIDEN aún no ha dicho
+# nada, suelta una frase corta antes de ponerse a trabajar. Mata el silencio muerto — Jarvis
+# nunca te deja hablando solo. Solo con las lentas: las instantáneas (abrir, volumen) no lo
+# necesitan y una frase extra ahí sería estorbo.
+_TOOLS_LENTAS = {
+    "buscar_en_internet", "investigar", "consultar_experto", "analizar_vision",
+    "analizar_pantalla", "resumir", "crear_proyecto", "ejecutar_proyecto",
+    "ejecutar_mision", "noticias_del_dia", "recordar_a_fondo", "Auto_Modificacion",
+}
+_MURMULLOS = (
+    "Un momento, señor.", "Enseguida se lo tengo.", "Déjeme ver...", "Voy con ello, señor.",
+    "Un segundo, lo consulto.", "Permítame un instante.",
+)
+
+
 def _es_error_tool(resultado):
     # True si el resultado de una herramienta indica que FALLÓ (excepción / no existe).
     return isinstance(resultado, str) and resultado.startswith(("Error ejecutando", "La herramienta "))
@@ -388,6 +443,7 @@ def proceso_de_ia(texto_de_whisper):
     texto_final = ""
 
     hubo_error = False
+    murmuro = False   # ya soltó el "un momento, señor" este turno (máx 1 vez)
     for _ronda in range(MAX_RONDAS):
         texto_acumulado = ""
         buffer_frase = ""
@@ -473,6 +529,12 @@ def proceso_de_ia(texto_de_whisper):
                 'content': texto_acumulado or None,
                 'tool_calls': tool_calls_list
             })
+            # MURMULLO: si viene una herramienta LENTA y AIDEN no ha dicho nada aún, avisa
+            # con una frase corta para no dejar a Marco en silencio muerto.
+            if (not murmuro and not texto_acumulado.strip()
+                    and any(tc['function']['name'] in _TOOLS_LENTAS for tc in tool_calls_list)):
+                decir(random.choice(_MURMULLOS))
+                murmuro = True
             hubo_error_tool = False
             for tc in tool_calls_list:
                 resultado = _ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
@@ -527,8 +589,10 @@ def proceso_de_ia(texto_de_whisper):
 
     memoria = _recortar_memoria(memoria)
 
-    # Guarda este intercambio en la memoria episódica (para recordarlo en el futuro).
+    # Guarda este intercambio en la memoria episódica (para recordarlo en el futuro)
+    # y persiste la conversación (si AIDEN se reinicia, retoma el hilo).
     registrar_episodio(texto_de_whisper, texto_final, origen="voz")
+    _guardar_conversacion()
     # APRENDIZAJE: si Marco corrigió/expresó una preferencia, apréndela (en 2do plano, sin latencia).
     try:
         from Nucleo_Slide.Aprendizaje import aprender_de
