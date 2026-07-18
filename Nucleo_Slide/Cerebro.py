@@ -14,7 +14,6 @@ import threading
 import queue
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from Voz_Slide.Transcriptor import escuchador_de_usuario
 import time
 import sys
 
@@ -457,7 +456,10 @@ def proceso_de_ia(texto_de_whisper):
 
         if ultima_interrumpida:
             texto_final = texto_acumulado.strip()
-            memoria.append({'role': 'assistant', 'content': texto_final or None})
+            # Si lo interrumpieron ANTES de decir nada, no se guarda: un assistant con
+            # content null (sin tool_calls) rompe la siguiente llamada al API.
+            if texto_final:
+                memoria.append({'role': 'assistant', 'content': texto_final})
             break
 
         if tool_calls_dict:
@@ -644,9 +646,14 @@ estado_aiden = {
 
 cola_alertas = queue.Queue()
 
+# Carpetas que el centinela IGNORA (venv y basura: miles de .py que no son de Marco).
+_IGNORAR_CENTINELA = ("Asistente_Slide_311", "Asistente\\", "__pycache__", ".git")
+
 class VigilanteCodigo(FileSystemEventHandler):
     def on_modified(self, event):
-        if not event.src_path.endswith('.py'):
+        if not str(event.src_path).endswith('.py'):
+            return
+        if any(seg in str(event.src_path) for seg in _IGNORAR_CENTINELA):
             return
         time.sleep(0.5)
         try:
@@ -664,26 +671,40 @@ class VigilanteCodigo(FileSystemEventHandler):
                 estado_aiden["codigo"] = codigo
                 estado_aiden["ya_notificado"] = True
                 cola_alertas.put("NUEVO_ERROR")
+        except OSError:
+            pass
 
 def hilo_procesador_alertas():
+    # Avisa por el VOCERO y NO toca el micrófono (antes llamaba a escuchador_de_usuario desde
+    # este hilo y peleaba por el mic con el bucle de la palabra clave). Marco responde cuando
+    # quiera con "ayúdame con el código" y Peticiones usa el error guardado en estado_aiden.
     while True:
         alerta = cola_alertas.get()
-        if alerta == "NUEVO_ERROR":
-            print(f"\n[!] AIDEN detecto error en linea {estado_aiden['linea']}")
-            hablado_del_asistente(f"Señor, detecte un error de sintaxis en la linea {estado_aiden['linea']}. Necesita ayuda?")
-            respuesta = (escuchador_de_usuario() or "").lower()
-            if "si" in respuesta or "si" in respuesta or "ayuda" in respuesta:
-                hablado_del_asistente("Estoy analizando la solucion, señor")
-                prompt = f"Hay un SyntaxError: '{estado_aiden['detalle_error']}' en la linea {estado_aiden['linea']}. Codigo: \n{estado_aiden['codigo']}\nDame una solucion corta y directa."
-                solucion = proceso_de_ia(prompt)
-                print(f"AIDEN: {solucion}")
-                hablado_del_asistente(solucion)
-            else:
-                hablado_del_asistente("Entendido, guardare el reporte por si cambia de opinion.")
+        if alerta != "NUEVO_ERROR":
+            continue
+        archivo = str(estado_aiden.get("archivo") or "").replace("\\", "/").rsplit("/", 1)[-1]
+        print(f"\n[!] AIDEN detecto SyntaxError en {archivo} linea {estado_aiden['linea']}")
+        try:
+            from Nucleo_Slide.Estado_Del_Mundo import registrar_evento
+            registrar_evento(f"SyntaxError en {archivo}, línea {estado_aiden['linea']}", "centinela")
+        except Exception:
+            pass
+        try:
+            from Nucleo_Slide.Vocero import emitir
+            emitir(hablado_del_asistente,
+                   f"Señor, detecté un error de sintaxis en la línea {estado_aiden['linea']} "
+                   f"de {archivo}. Si quiere lo revisamos: dígame 'ayúdame con el código'.",
+                   origen="centinela")
+        except Exception:
+            pass
 
 def iniciar_centinela(ruta="."):
-    observer = Observer()
-    observer.schedule(VigilanteCodigo(), path=ruta, recursive=True)
-    observer.start()
-    hilo_alertas = threading.Thread(target=hilo_procesador_alertas, daemon=True)
-    hilo_alertas.start()
+    # Vigila el código de Marco y detecta SyntaxError al guardar. Aislado: si watchdog
+    # falla (permisos, disco), AIDEN sigue vivo sin centinela.
+    try:
+        observer = Observer()
+        observer.schedule(VigilanteCodigo(), path=ruta, recursive=True)
+        observer.start()
+        threading.Thread(target=hilo_procesador_alertas, daemon=True).start()
+    except Exception as e:
+        print(f"[centinela] omitido: {e}")
