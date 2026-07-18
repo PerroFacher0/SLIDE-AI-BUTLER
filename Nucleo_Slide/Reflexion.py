@@ -83,7 +83,7 @@ def reflexionar(forzar=False):
     )
     anterior = (_reflexion.get("texto") or "").strip()
     try:
-        from Nucleo_Slide.Cerebro import client, MODELO
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO as MODELO
         prompt = (
             "Eres la parte REFLEXIVA de AIDEN, que piensa en Marco como un amigo cercano que lo conoce "
             "bien. A partir de sus conversaciones recientes (y tu reflexión anterior si la hay), escribe "

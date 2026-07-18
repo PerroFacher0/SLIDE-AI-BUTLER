@@ -21,7 +21,7 @@ def _evento(texto):
 
 def _subpreguntas(tema):
     try:
-        from Nucleo_Slide.Cerebro import client, MODELO
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO as MODELO
         r = client.chat.completions.create(
             model=MODELO,
             messages=[{"role": "user", "content":

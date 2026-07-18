@@ -9,9 +9,14 @@ from faster_whisper import WhisperModel
 
 
 instancia = sr.Recognizer()
-instancia.pause_threshold = 2
+# 1.5s de silencio para dar por terminada la frase (antes 2s: medio segundo de espera muerta
+# en CADA turno antes de siquiera empezar a transcribir).
+instancia.pause_threshold = 1.5
 print("Cargando Modelo...")
-model = WhisperModel("small", device="cuda", compute_type="int8_float16")
+# large-v3-turbo: calidad de large-v3 con velocidad de medium (~1.7 GB VRAM en int8_float16).
+# Sube MUCHO el oído en español vs "small" (que era PEOR que el "medium" del wake-word del VAD).
+_MODELO_VOZ = "large-v3-turbo"
+model = WhisperModel(_MODELO_VOZ, device="cuda", compute_type="int8_float16")
 
 
 def _asegurar_modelo():
@@ -19,7 +24,7 @@ def _asegurar_modelo():
     global model
     if model is None:
         print("Recargando Whisper (voz)...")
-        model = WhisperModel("small", device="cuda", compute_type="int8_float16")
+        model = WhisperModel(_MODELO_VOZ, device="cuda", compute_type="int8_float16")
     return model
 
 

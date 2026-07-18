@@ -45,6 +45,10 @@ client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_
 # gemini-2.5-flash (no el "lite"): con 44 herramientas, flash-lite malformaba la mitad de las
 # llamadas (MALFORMED_FUNCTION_CALL); flash es confiable (0 errores medido) y casi igual de rapido.
 MODELO = "google/gemini-2.5-flash"
+# MODELO LIGERO para la maquinaria INTERNA de solo-texto que Marco nunca escucha directo
+# (destilar perfil/reflexión, extraer preferencias, sub-preguntas de investigación): sin
+# tool-calls no hay riesgo de malformación, y cuesta una fracción. Lo que Marco OYE sigue en flash.
+MODELO_LIGERO = "google/gemini-2.5-flash-lite"
 MAX_RONDAS = 5   # cuantas tandas de herramientas encadenadas como maximo por turno
 # Temperatura ALTA en el 1er intento => conserva la chispa y el humor de AIDEN en las respuestas.
 # Si Gemini malforma una llamada a funcion (MALFORMED_FUNCTION_CALL, mas probable con muchas tools
@@ -243,30 +247,27 @@ Cuando te pida el clima, recuerda que está en BOGOTÁ."""
 
 
 def _instrucciones_completas(consulta=""):
-    # El system prompt + la memoria persistente de Marco (se relee cada vez) +, si vienen al
-    # caso, las conversaciones pasadas relevantes a lo que Marco está diciendo ahora.
+    # El system prompt completo. ORDEN DELIBERADO para el caché implícito de Gemini: los bloques
+    # ESTABLES van primero (instrucciones, memoria, perfil, preferencias, reflexión — cambian poco
+    # entre turnos, se cachean => prefill más rápido y tokens con descuento) y lo VOLÁTIL al final
+    # (fecha/hora cambia cada minuto; contexto/episodios/sintonía cambian cada turno). Antes la
+    # fecha iba de primera y rompía el caché de TODO lo que seguía.
     base = (INSTRUCCIONES
-            + "\n\nFECHA Y HORA ACTUAL (úsala para decir la hora/fecha, calcular recordatorios "
-              "y ubicar 'hoy/ayer/mañana'): " + _fecha_hora_actual()
             + "\n\nMEMORIA PERSISTENTE — cosas que sabes de Marco:\n" + obtener_memoria_texto())
-    episodios = recordar_relevantes(consulta)
-    if episodios:
-        base += "\n\n" + episodios
-    # CONCIENCIA COMPARTIDA: qué está pasando AHORA en el PC (lo que vieron los vigilantes/la
-    # conciencia). Así el cerebro de voz NO arranca de cero: sabe el contexto del momento.
-    try:
-        from Nucleo_Slide.Estado_Del_Mundo import resumen_texto
-        mundo = resumen_texto()
-        if mundo:
-            base += "\n\nCONTEXTO ACTUAL (lo que está pasando en tu PC ahora mismo):\n" + mundo
-    except Exception:
-        pass
     # PERFIL APRENDIDO: lo que AIDEN ha aprendido de Marco con el tiempo (intereses, rutinas...).
     try:
         from Nucleo_Slide.Perfil_Marco import perfil_texto
         perfil = perfil_texto()
         if perfil:
             base += "\n\nLO QUE HAS APRENDIDO DE MARCO (úsalo para entenderlo y anticiparte, con tacto):\n" + perfil
+    except Exception:
+        pass
+    # PREFERENCIAS APRENDIDAS: reglas que Marco te ha enseñado corrigiéndote (órdenes explícitas).
+    try:
+        from Nucleo_Slide.Aprendizaje import preferencias_texto
+        prefs = preferencias_texto()
+        if prefs:
+            base += "\n\n" + prefs
     except Exception:
         pass
     # REFLEXIÓN: tu lectura del MOMENTO de Marco (su arco/situación), para entenderlo de fondo.
@@ -278,21 +279,27 @@ def _instrucciones_completas(consulta=""):
                     "úsala para entenderlo y acompañarlo, NO la recites):\n" + refl
     except Exception:
         pass
+    # ── De aquí para abajo, lo VOLÁTIL (cambia cada turno/minuto) ──
+    base += ("\n\nFECHA Y HORA ACTUAL (úsala para decir la hora/fecha, calcular recordatorios "
+             "y ubicar 'hoy/ayer/mañana'): " + _fecha_hora_actual())
+    # CONCIENCIA COMPARTIDA: qué está pasando AHORA en el PC (lo que vieron los vigilantes/la
+    # conciencia). Así el cerebro de voz NO arranca de cero: sabe el contexto del momento.
+    try:
+        from Nucleo_Slide.Estado_Del_Mundo import resumen_texto
+        mundo = resumen_texto()
+        if mundo:
+            base += "\n\nCONTEXTO ACTUAL (lo que está pasando en tu PC ahora mismo):\n" + mundo
+    except Exception:
+        pass
+    episodios = recordar_relevantes(consulta)
+    if episodios:
+        base += "\n\n" + episodios
     # SINTONÍA: cómo está Marco ahora -> ajusta el TONO (no lo que haces).
     try:
         from Nucleo_Slide.Sintonia import lectura_de_estado
         tono = lectura_de_estado(consulta)
         if tono:
             base += "\n\n" + tono
-    except Exception:
-        pass
-    # PREFERENCIAS APRENDIDAS: reglas que Marco te ha enseñado corrigiéndote. Van AL FINAL (máxima
-    # prioridad) porque son órdenes explícitas suyas sobre cómo comportarte.
-    try:
-        from Nucleo_Slide.Aprendizaje import preferencias_texto
-        prefs = preferencias_texto()
-        if prefs:
-            base += "\n\n" + prefs
     except Exception:
         pass
     return base
@@ -412,6 +419,12 @@ def _recortar_memoria(mem):
     mem = mem[-20:]
     while mem and (mem[0].get('role') == 'tool' or mem[0].get('tool_calls')):
         mem.pop(0)
+    # DIETA DE TOKENS: los resultados de herramientas VIEJOS (una búsqueda puede pesar miles de
+    # tokens) se truncan en el historial — el turno actual ya los usó completos; para el futuro
+    # basta la esencia. Esto se paga en CADA turno siguiente, así que ahorra mucho.
+    for m in mem:
+        if m.get('role') == 'tool' and isinstance(m.get('content'), str) and len(m['content']) > 300:
+            m['content'] = m['content'][:300] + " (...recortado)"
     return mem
 
 

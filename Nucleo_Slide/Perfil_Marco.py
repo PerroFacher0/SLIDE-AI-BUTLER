@@ -105,7 +105,7 @@ def actualizar_perfil(forzar=False):
         return
 
     try:
-        from Nucleo_Slide.Cerebro import client, MODELO
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO as MODELO
         muestra = "\n".join(
             f'- [{e.get("fecha","")}] Marco: "{e.get("usuario","")[:120]}"'
             for e in episodios[-60:]

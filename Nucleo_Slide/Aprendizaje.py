@@ -70,7 +70,7 @@ def preferencias_texto():
 
 def _extraer_y_guardar(consulta):
     try:
-        from Nucleo_Slide.Cerebro import client, MODELO
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO as MODELO
         prompt = (
             "Marco (tu usuario) acaba de decirte esto, que parece una CORRECCIÓN o PREFERENCIA sobre "
             "cómo debes comportarte. Extrae UNA regla/preferencia DURADERA y GENERAL que debas recordar "
