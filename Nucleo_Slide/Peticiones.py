@@ -155,6 +155,22 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
     return ("llm", original)
 
 
+# Palabras que despiertan a AIDEN (espejo de VAD.palabras, en plano). Para extraer el comando
+# que Marco dice EN EL MISMO ALIENTO: "aiden, abre spotify" -> "abre spotify".
+_WAKE_WORDS = ("papa esta en casa", "papa esta en caza", "te necesito", "despierta", "activate",
+               "hey den", "slight", "slide", "aiden", "eiden", "ayden", "oye")
+
+
+def extraer_comando_tras_wake(texto):
+    """Si el texto trae un COMANDO además de la palabra clave, lo devuelve limpio; si era solo
+    la palabra clave (o casi), devuelve "". Puro y testeable."""
+    p = _plano(texto)
+    for w in _WAKE_WORDS:   # ya ordenadas de más larga a más corta (no dejar residuos)
+        p = p.replace(w, " ")
+    p = " ".join(p.split()).strip(" ,.¿?¡!")
+    return p if len(p) >= 3 else ""
+
+
 def _cerrar_taller_silencioso():
     # Al descansar o despedir el día, la sesión de taller (si la hay) se cierra sola.
     try:
@@ -235,10 +251,20 @@ def Procesar_Peticion(texto, ventana):
             ventana.enviar_texto_a_html("AIDEN >> Revisando la memoria de errores...", "#d500f9")
             prompt = (f"Hay un SyntaxError: '{estado_aiden['detalle_error']}' en la línea "
                       f"{estado_aiden['linea']}. Código: \n{estado_aiden['codigo']}\nDame una solución corta.")
-            respuesta_slide = proceso_de_ia(prompt)
+            try:
+                respuesta_slide = proceso_de_ia(prompt)
+            except Exception:
+                respuesta_slide = "No pude analizar el error ahora, señor; intentémoslo de nuevo."
             ya_hablado = True
         else:
-            respuesta_slide = proceso_de_ia(texto)
+            # RED DE SEGURIDAD: pase lo que pase dentro del cerebro, el loop de conversación
+            # NUNCA muere en silencio (regla "siempre arriba").
+            try:
+                respuesta_slide = proceso_de_ia(texto)
+            except Exception as e:
+                print(f"[peticiones] excepción no prevista del cerebro: {e}")
+                respuesta_slide = ("Tuve un tropiezo interno, señor, pero sigo en pie. "
+                                   "Intentémoslo de nuevo.")
             ya_hablado = True
 
         ventana.enviar_texto_a_html(f"AIDEN >> {respuesta_slide}", "#d500f9")

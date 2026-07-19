@@ -103,7 +103,16 @@ def Reconocimiento_de_habla():
                 tiempo_despierto = time.time()
                 asistente_despierto=True
                 stream.stop_stream()
-                hablado_del_asistente("A su servicio señor")
+                # UNA SOLA RESPIRACIÓN: si con la palabra clave vino un COMANDO ("aiden, abre
+                # spotify"), no digas "a su servicio" — AIDEN va a responder/ejecutar YA.
+                _solo_wake = True
+                try:
+                    from Nucleo_Slide.Peticiones import extraer_comando_tras_wake
+                    _solo_wake = extraer_comando_tras_wake(texto_limpio) == ""
+                except Exception:
+                    pass
+                if _solo_wake:
+                    hablado_del_asistente("A su servicio señor")
                 return True, texto_limpio
 
                 

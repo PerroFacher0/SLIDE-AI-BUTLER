@@ -509,6 +509,7 @@ def proceso_de_ia(texto_de_whisper):
     hubo_error = False
     murmuro = False        # ya soltó el "un momento, señor" este turno (máx 1 vez)
     errores_seguidos = 0   # rondas consecutivas con una herramienta fallando (self-healing)
+    sin_enlace = False     # True si el API no responde (internet caído) -> modo local honesto
     for _ronda in range(MAX_RONDAS):
         texto_acumulado = ""
         buffer_frase = ""
@@ -524,47 +525,58 @@ def proceso_de_ia(texto_de_whisper):
 
             # 1er intento con chispa (temp alta); reintentos a temp 0 si malforma la llamada.
             temp = TEMPERATURA if _intento == 0 else TEMPERATURA_SEGURA
-            stream = client.chat.completions.create(
-                model=MODELO,
-                messages=[{'role': 'system', 'content': instrucciones}, *memoria],
-                tools=tools,
-                tool_choice="auto",
-                temperature=temp,
-                stream=True
-            )
+            try:
+                stream = client.chat.completions.create(
+                    model=MODELO,
+                    messages=[{'role': 'system', 'content': instrucciones}, *memoria],
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=temp,
+                    stream=True
+                )
 
-            for chunk in stream:
-                choice = chunk.choices[0]
-                if choice.finish_reason == "error":
-                    hubo_error = True
-                delta = choice.delta
+                for chunk in stream:
+                    choice = chunk.choices[0]
+                    if choice.finish_reason == "error":
+                        hubo_error = True
+                    delta = choice.delta
 
-                # Texto normal — habla frase por frase conforme llega
-                if delta.content:
-                    buffer_frase += delta.content
-                    texto_acumulado += delta.content
-                    partes = re.split(r'(?<=[.!?])\s+', buffer_frase)
-                    for frase in partes[:-1]:
-                        if frase.strip():
-                            decir(frase.strip())
-                    buffer_frase = partes[-1]
+                    # Texto normal — habla frase por frase conforme llega
+                    if delta.content:
+                        buffer_frase += delta.content
+                        texto_acumulado += delta.content
+                        partes = re.split(r'(?<=[.!?])\s+', buffer_frase)
+                        for frase in partes[:-1]:
+                            if frase.strip():
+                                decir(frase.strip())
+                        buffer_frase = partes[-1]
 
-                if ultima_interrumpida:   # el usuario corto a AIDEN -> dejamos de procesar
-                    break
+                    if ultima_interrumpida:   # el usuario corto a AIDEN -> dejamos de procesar
+                        break
 
-                # Tool calls — acumula los chunks parciales
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in tool_calls_dict:
-                            tool_calls_dict[idx] = {'id': '', 'name': '', 'arguments': ''}
-                        if tc.id:
-                            tool_calls_dict[idx]['id'] = tc.id
-                        if tc.function:
-                            if tc.function.name:
-                                tool_calls_dict[idx]['name'] += tc.function.name
-                            if tc.function.arguments:
-                                tool_calls_dict[idx]['arguments'] += tc.function.arguments
+                    # Tool calls — acumula los chunks parciales
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            if idx not in tool_calls_dict:
+                                tool_calls_dict[idx] = {'id': '', 'name': '', 'arguments': ''}
+                            if tc.id:
+                                tool_calls_dict[idx]['id'] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    tool_calls_dict[idx]['name'] += tc.function.name
+                                if tc.function.arguments:
+                                    tool_calls_dict[idx]['arguments'] += tc.function.arguments
+                sin_enlace = False
+            except Exception as e:
+                # SIN ENLACE (internet caído / API muerta): NUNCA tumba el loop de conversación.
+                # Reintenta; si no hay manera, abajo se dice con honestidad y los atajos locales
+                # (música, apps, protocolos, recados, estado) siguen a su servicio.
+                print(f"[cerebro] sin enlace con el API: {e}")
+                hubo_error = True
+                sin_enlace = True
+                time.sleep(0.4)
+                continue
 
             # Si erroró sin producir nada util, reintenta la ronda; si no, sigue.
             if hubo_error and not texto_acumulado and not tool_calls_dict and not ultima_interrumpida:
@@ -648,15 +660,22 @@ def proceso_de_ia(texto_de_whisper):
                                 decir(_fr.strip())
                         texto_final = pro
             elif hubo_error:
-                # MALFORMED tras reintentos: en vez de un mensaje vacío, escala a Pro.
-                pro = ""
-                if ESCALADO_AUTO and not ultima_interrumpida:
-                    decir(_frase_escalado())
-                    pro = _escalar_a_pro(texto_de_whisper, memoria)
-                    for _fr in re.split(r'(?<=[.!?])\s+', pro):
-                        if _fr.strip():
-                            decir(_fr.strip())
-                texto_final = pro or "Disculpe, señor, tuve un problema técnico al procesar eso. ¿Lo intenta de nuevo?"
+                if sin_enlace:
+                    # SIN INTERNET: honestidad y modo local (no intentes Pro: también está caído).
+                    texto_final = ("Perdí el enlace con mis servidores, señor. Sigo en pie con los "
+                                   "controles locales: música, aplicaciones, protocolos, recados y "
+                                   "estado. En cuanto vuelva la conexión, vuelvo a pensar a fondo.")
+                    decir(texto_final)
+                else:
+                    # MALFORMED tras reintentos: en vez de un mensaje vacío, escala a Pro.
+                    pro = ""
+                    if ESCALADO_AUTO and not ultima_interrumpida:
+                        decir(_frase_escalado())
+                        pro = _escalar_a_pro(texto_de_whisper, memoria)
+                        for _fr in re.split(r'(?<=[.!?])\s+', pro):
+                            if _fr.strip():
+                                decir(_fr.strip())
+                    texto_final = pro or "Disculpe, señor, tuve un problema técnico al procesar eso. ¿Lo intenta de nuevo?"
             else:
                 texto_final = _confirmacion()
             memoria.append({'role': 'assistant', 'content': texto_final})

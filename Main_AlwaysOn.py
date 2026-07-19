@@ -158,13 +158,24 @@ except Exception:
 
 # ── Cerebro de REPOSO en hilo de fondo (solo micrófono) ──────────────────────
 def bucle_reposo():
+    from Nucleo_Slide.Peticiones import extraer_comando_tras_wake
     while True:
-        Activado, _Texto = Reconocimiento_de_habla()   # REPOSO: escucha la palabra clave
+        Activado, Texto = Reconocimiento_de_habla()    # REPOSO: escucha la palabra clave
         if not Activado:
             continue                                    # no detectada -> sigue esperando (no se apaga)
-        # ACTIVO: pide mostrar la ventana (en el hilo principal) y espera a que se oculte.
+        # ACTIVO: pide mostrar la ventana (en el hilo principal).
         _evento_oculto.clear()
         ventana.pedir_mostrar.emit()
+        # UNA SOLA RESPIRACIÓN: si con la palabra clave vino el comando ("aiden, ¿qué hora
+        # es?"), se responde YA — antes el comando se DESCARTABA y tocaba repetirlo.
+        try:
+            comando = extraer_comando_tras_wake(Texto or "")
+            if comando:
+                ventana.enviar_texto_a_html(f"USER (Voz) >> {comando}", "#ffffff")
+                print(f"USER (Voz, con la palabra clave): {comando}")
+                Procesar_Peticion(comando, ventana)
+        except Exception as e:
+            print(f"[reposo] error procesando el comando del despertar: {e}")
         _evento_oculto.wait()                           # la ventana se oculta tras 60s o al cerrarla
         # vuelve arriba a REPOSO
 
