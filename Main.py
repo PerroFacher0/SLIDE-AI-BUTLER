@@ -38,6 +38,10 @@ from Funciones_Slide.Sistema.Preparacion import iniciar_preparacion
 from Funciones_Slide.Info.Finanzas_Gastos import iniciar_vigilante_gastos
 from Funciones_Slide.Productividad.Ordenes_Condicionales import iniciar_ordenes
 from Nucleo_Slide.Monologo import iniciar_monologo
+from Funciones_Slide.Sistema.Sesion import iniciar_sesion_autoguardado
+from Funciones_Slide.Sistema.Mayordomo_Archivos import iniciar_mayordomo_archivos
+from Funciones_Slide.Info.Agenda import resumen_dia
+from Funciones_Slide.Info.Bitacora import resumen_priorizado
 # El enrutador de peticiones (atajos + LLM + manos libres) vive en UN solo módulo compartido
 # con Main_AlwaysOn.py: cada arreglo aplica a los dos a la vez (antes estaba duplicado y divergía).
 from Nucleo_Slide.Peticiones import Procesar_Peticion, Voz
@@ -61,12 +65,12 @@ if verificacion == "Bienvenido Marco":
     Activado, Texto = Reconocimiento_de_habla()
     hablado_del_asistente(apertura_rica())   # apertura que canaliza TODO el núcleo (memoria+pendiente+meta+momento)
     hablado_del_asistente(briefing())
-    _n_notis = contar_actividad()
-    if _n_notis > 0:
-        hablado_del_asistente(
-            f"Por cierto señor, mientras no estaba llegaron {_n_notis} notificaciones. "
-            "Si quiere saber qué pasó, pídame el resumen."
-        )
+    _dia = resumen_dia()                      # tu día real: agenda + correos sin leer (si está configurado)
+    if _dia:
+        hablado_del_asistente(_dia)
+    _prior = resumen_priorizado()             # notificaciones priorizadas (solo lo que importa)
+    if _prior:
+        hablado_del_asistente(_prior)
     iniciar_alertas(hablado_del_asistente)
     iniciar_guardian_descanso(hablado_del_asistente)
     iniciar_anticipacion(hablado_del_asistente)   # anticipación proactiva (clima, trasnochadas)
@@ -86,6 +90,8 @@ if verificacion == "Bienvenido Marco":
     iniciar_centinela()                                # detecta SyntaxError al guardar tu código (estaba muerto)
     iniciar_ordenes(hablado_del_asistente)             # recados condicionales ("en 20 min...", "cuando abra X...")
     iniciar_monologo()                                 # mini consciencia: pensamiento interno vivo (se ve en el overlay)
+    iniciar_sesion_autoguardado()                      # recuerda tu espacio de trabajo (para "retomemos")
+    iniciar_mayordomo_archivos(hablado_del_asistente)  # ordena capturas/instaladores 1 vez al día (habito suyo)
     ejecutar_slide(funcion_texto=Procesar_Peticion, funcion_voz=Voz)
     
     while Activado: 

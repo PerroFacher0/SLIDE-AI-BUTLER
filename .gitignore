@@ -18,6 +18,8 @@ conversacion.json
 protocolos.json
 ordenes.json
 monologo.json
+sesion.json
+.mayordomo_ultimo
 AIDEN_log.txt
 secretos.py
 notas.txt

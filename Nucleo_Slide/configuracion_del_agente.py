@@ -18,6 +18,8 @@ from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_pr
 from Funciones_Slide.Sistema.Taller import modo_taller
 from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
 from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
+from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy
+from Funciones_Slide.Sistema.Sesion import restaurar_sesion
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -870,6 +872,42 @@ tools = [
                 "required": ["comando"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "revisar_correo",
+            "description": "Revisa los correos SIN LEER de Marco (asunto + remitente). Úsala cuando pregunte 'revisa mi correo', '¿me llegó algo?', '¿algo importante en el mail?'.",
+            "parameters": {
+                "type": "object",
+                "properties": {"cuantos": {"type": "integer", "description": "Cuántos correos traer (def 5, máx 10)."}},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agenda_hoy",
+            "description": "Los eventos del calendario de Marco para HOY o MAÑANA (clases, entregas, citas). Úsala cuando pregunte '¿qué tengo hoy?', '¿qué hay en mi agenda?', '¿tengo algo mañana?'.",
+            "parameters": {
+                "type": "object",
+                "properties": {"dia": {"type": "string", "description": "hoy (por defecto) | mañana"}},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restaurar_sesion",
+            "description": "Reabre el espacio de trabajo que Marco tenía (las apps que estaban abiertas). Úsala cuando diga 'retomemos', 'restaura mi sesión', 'abre lo de antes', 'sigamos donde quedamos'. accion 'guardar' fuerza guardar el estado actual.",
+            "parameters": {
+                "type": "object",
+                "properties": {"accion": {"type": "string", "description": "restaurar (por defecto) | guardar"}},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -929,4 +967,7 @@ tools_map = {
     "modo_taller": modo_taller,
     "programar_orden": programar_orden,
     "ejecutar_en_pc": ejecutar_en_pc,
+    "revisar_correo": revisar_correo,
+    "agenda_hoy": agenda_hoy,
+    "restaurar_sesion": restaurar_sesion,
 }

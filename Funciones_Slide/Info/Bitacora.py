@@ -71,6 +71,47 @@ def contar_actividad(horas=12):
     return len(eventos) if eventos else 0
 
 
+def resumen_priorizado(horas=16):
+    # Para el saludo al volver: en vez de "llegaron 23 notificaciones", AIDEN LEE lo que llego y te
+    # dice SOLO lo que importa (con criterio, via LLM). Si el LLM no esta, cae al conteo simple.
+    try:
+        horas = int(horas)
+    except (ValueError, TypeError):
+        horas = 16
+    eventos = _leer_notificaciones(horas)
+    if not eventos:
+        return ""
+    vistos, lineas = set(), []
+    for app, txt in eventos:
+        clave = (app, txt)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        app_corto = (app or "App").split("!")[-1].split("_")[0][:24]
+        lineas.append(f"[{app_corto}] {txt}")
+        if len(lineas) >= 40:
+            break
+    try:
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO
+        prompt = (
+            "Eres AIDEN, el mayordomo de Marco. Mientras el no estaba llegaron estas notificaciones a "
+            "su PC. Dile en 1-2 frases, hablado y natural (trato de 'señor'), SOLO lo que de verdad "
+            "importa o es urgente (mensajes de personas, algo con fecha/plazo). Ignora ruido "
+            "(promos, apps del sistema, juegos). Si nada importa, di exactamente: NADA.\n\n"
+            + "\n".join(lineas)
+        )
+        r = client.chat.completions.create(
+            model=MODELO_LIGERO, messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, max_tokens=120,
+        )
+        out = (r.choices[0].message.content or "").strip()
+        if out and not out.upper().startswith("NADA"):
+            return out
+        return ""
+    except Exception:
+        return f"Mientras no estaba llegaron {len(vistos)} notificaciones, señor."
+
+
 def resumen_actividad(horas=16):
     try:
         horas = int(horas)

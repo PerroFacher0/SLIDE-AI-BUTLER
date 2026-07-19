@@ -118,6 +118,15 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
     if p.strip(" ?¿") in _PEDIR_ESTADO:
         return ("estado", None)
 
+    # RETOMEMOS: reabrir el espacio de trabajo (sin LLM).
+    if any(k in p for k in ("retomemos", "retomar sesion", "restaura mi sesion", "restaurar sesion",
+                            "abre lo de antes", "donde lo deje")):
+        return ("retomar", None)
+
+    # MÚSICA CONTEXTUAL: "pon lo mío" -> según en qué esté Marco (sin LLM).
+    if p in ("pon lo mio", "pon mi musica", "musica", "ponme musica", "pon musica"):
+        return ("musica_contextual", None)
+
     # MODO TALLER (copiloto de pantalla): entrar/salir sin gastar LLM.
     if any(k in p for k in ("acompaname", "modo taller", "trabajemos juntos", "trabaja conmigo")):
         return ("taller_on", None)
@@ -169,6 +178,33 @@ def extraer_comando_tras_wake(texto):
         p = p.replace(w, " ")
     p = " ".join(p.split()).strip(" ,.¿?¡!")
     return p if len(p) >= 3 else ""
+
+
+def _musica_contextual():
+    # "Pon lo mío": elige música según en qué está Marco y qué hora es (cero LLM).
+    import datetime as _dt
+    foco = ""
+    try:
+        from Nucleo_Slide.Percepcion import ventana_activa
+        foco = ventana_activa().lower()
+    except Exception:
+        pass
+    juegos = ("steam", "league", "valorant", "game", "riot", "epic", "minecraft", "fortnite")
+    trabajo = ("code", "visual studio", "word", "excel", "pdf", "notion", "docs", "overleaf")
+    if any(j in foco for j in juegos):
+        query, etiqueta = "epic gaming music mix", "algo con energía para el juego"
+    elif any(t in foco for t in trabajo):
+        query, etiqueta = "lofi hip hop radio beats to study", "lo-fi para concentrarse"
+    elif _dt.datetime.now().hour >= 22 or _dt.datetime.now().hour < 6:
+        query, etiqueta = "chill relaxing music night", "algo tranquilo para la hora"
+    else:
+        query, etiqueta = "musica variada mix", "una mezcla para el momento"
+    try:
+        from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Videos_Youtube
+        Abrir_Videos_Youtube(query)
+        return f"Marchando {etiqueta}, señor."
+    except Exception:
+        return "No pude poner la música, señor."
 
 
 def _set_modo_rapido(activo):
@@ -225,6 +261,11 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
             respuesta_slide = _informe_estado()
+        elif tipo == "retomar":
+            from Funciones_Slide.Sistema.Sesion import restaurar_sesion
+            respuesta_slide = restaurar_sesion()
+        elif tipo == "musica_contextual":
+            respuesta_slide = _musica_contextual()
         elif tipo == "taller_on":
             from Funciones_Slide.Sistema.Taller import modo_taller
             respuesta_slide = modo_taller("iniciar")

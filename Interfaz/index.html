@@ -83,6 +83,20 @@ body,html{
   0%{width:160px;height:160px;opacity:.45;transform:translate(-50%,-50%)}
   100%{width:500px;height:500px;opacity:0;transform:translate(-50%,-50%)}
 }
+/* ── SUBTÍTULOS EN VIVO (lo que oí / lo que digo) ─────────────────────────── */
+.caption{
+  position:absolute;bottom:150px;left:50%;transform:translateX(-50%);
+  max-width:80%;text-align:center;z-index:20;pointer-events:none;
+  opacity:0;transition:opacity .35s ease;
+}
+.caption.show{opacity:1}
+.cap-who{font-size:8.5px;letter-spacing:3.5px;color:var(--dim);margin-bottom:6px}
+.cap-txt{
+  font-size:16px;line-height:1.55;color:var(--txt);
+  text-shadow:0 0 14px rgba(var(--aq-r),var(--aq-g),var(--aq-b),.22);
+}
+.caption.aiden .cap-txt{color:var(--aq)}
+.shell.thinking{border-color:rgba(var(--aq-r),var(--aq-g),var(--aq-b),.30)}
 .term-wrap{width:100%;padding:0 26px 18px;flex-shrink:0;z-index:10}
 .term{
   background:rgba(0,10,9,.92);
@@ -333,6 +347,12 @@ body,html{
 
   <div class="sphere-wrap" id="sw" onclick="clickReactor(event)">
     <canvas id="main-canvas"></canvas>
+  </div>
+
+  <!-- SUBTÍTULOS EN VIVO -->
+  <div class="caption" id="caption">
+    <div class="cap-who" id="cap-who"></div>
+    <div class="cap-txt" id="cap-txt"></div>
   </div>
 
   <div class="term-wrap">
@@ -919,11 +939,47 @@ function clickReactor(e) {
 const chatLog = document.getElementById('chat-log');
 const userInp = document.getElementById('user-input');
 
+// ── SUBTÍTULOS EN VIVO + ESTADO "PROCESANDO" ──────────────────────────────────
+let _capTimer = null;
+function setCaption(kind, text) {
+  const cap = document.getElementById('caption');
+  if (!cap || !text) return;
+  cap.classList.toggle('aiden', kind === 'aiden');
+  document.getElementById('cap-who').textContent = kind === 'aiden' ? 'A I D E N' : 'LE OÍ';
+  document.getElementById('cap-txt').textContent = text.length > 160 ? text.slice(0, 160) + '…' : text;
+  cap.classList.add('show');
+  if (_capTimer) clearTimeout(_capTimer);
+  _capTimer = setTimeout(() => cap.classList.remove('show'), kind === 'aiden' ? 9000 : 6000);
+}
+function _setThinking(on) {
+  // Llena el vacío visual entre "terminaste de hablar" y "AIDEN responde".
+  if (on) {
+    _clearTimers();
+    shell.classList.add('thinking');
+    modLbl.textContent = 'PROCESANDO';
+    dots.forEach(d => d.classList.add('on'));
+  } else {
+    shell.classList.remove('thinking');
+  }
+}
+
 function appendLog(mensaje, color) {
   color = color || '#ffcc00';
   const line = document.createElement('div');
   line.style.color=color; line.textContent=mensaje;
   chatLog.appendChild(line); chatLog.scrollTop=chatLog.scrollHeight;
+
+  // Subtítulos: el mismo texto que ya llega al terminal alimenta el caption grande.
+  try {
+    const cuerpo = mensaje.replace(/^[^>]*>>\s*/, '').replace(/^(AIDEN:|SLIDE:)\s*/i, '').trim();
+    if (/^(USER \(Voz\)|OPR)\s*>>/.test(mensaje)) {
+      setCaption('heard', cuerpo);
+      _setThinking(true);                       // Marco habló -> AIDEN procesando
+    } else if (/^AIDEN\s*>>/.test(mensaje) && !mensaje.includes('>> (')) {
+      setCaption('aiden', cuerpo);              // respuesta real (no los "(sigo aquí...)")
+      _setThinking(false);
+    }
+  } catch (e) {}
   // Espejo al Modo Amigo (solo respuestas de AIDEN, no comandos del usuario)
   if (buddyOpen && !mensaje.startsWith('OPR >> ')) {
     const clean = mensaje.replace(/^(AIDEN:|SLIDE:)\s*/i,'').trim();

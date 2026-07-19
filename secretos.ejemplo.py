@@ -27,3 +27,17 @@ BELVO_SECRET_ID       = ""
 BELVO_SECRET_PASSWORD = ""
 BELVO_LINK            = ""
 BELVO_BASE            = "https://sandbox.belvo.com"   # cambia a https://api.belvo.com en produccion
+
+# CORREO (para que AIDEN revise tu bandeja y arme el briefing con tu dia real). Setup unico:
+#   1. Activa IMAP en tu correo. En Gmail/UNAL crea una "Clave de aplicacion" (NO tu clave normal):
+#      https://myaccount.google.com/apppasswords  -> pega esa clave de 16 letras en CORREO_PASS.
+#   2. Host IMAP: Gmail/UNAL = "imap.gmail.com"; Outlook = "outlook.office365.com".
+# Deja "" si no lo usas; revisar_correo te avisara que falta configurar.
+CORREO_IMAP = ""
+CORREO_USER = ""
+CORREO_PASS = ""
+
+# CALENDARIO (para "¿que tengo hoy?" y el briefing). Pega la URL SECRETA en formato ICS de tu
+# calendario: Google Calendar -> Configuracion -> "Direccion secreta en formato iCal" (termina en .ics).
+# Deja "" si no lo usas; agenda_hoy te avisara que falta.
+CALENDARIO_ICS = ""
