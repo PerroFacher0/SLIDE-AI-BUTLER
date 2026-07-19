@@ -17,6 +17,7 @@ from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
 from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_protocolo
 from Funciones_Slide.Sistema.Taller import modo_taller
 from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
+from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -854,6 +855,21 @@ tools = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ejecutar_en_pc",
+            "description": "LLAVE MAESTRA: ejecuta un comando de PowerShell en el PC de Marco. Úsala para hacer CUALQUIER cosa que Windows permita y que NO tenga ya una herramienta propia: mover/copiar/renombrar/buscar archivos y carpetas, crear archivos, matar/listar procesos, cambiar ajustes del sistema, red (wifi, IP, ping), energía/apagado programado, tareas, registro, limpiar temporales, información del sistema, abrir cosas con parámetros, etc. TÚ compones el PowerShell correcto. Encadena varias acciones con ';'. Para cosas que YA tienen herramienta (música, volumen, apps comunes, clima, WhatsApp) usa esas. Reporta el resultado a Marco en lenguaje natural y breve.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comando": {"type": "string", "description": "El comando de PowerShell a ejecutar (válido, completo)."},
+                    "descripcion": {"type": "string", "description": "En una frase, qué logra (para el registro)."}
+                },
+                "required": ["comando"]
+            }
+        }
     }
 ]
 
@@ -912,4 +928,5 @@ tools_map = {
     "crear_protocolo": crear_protocolo,
     "modo_taller": modo_taller,
     "programar_orden": programar_orden,
+    "ejecutar_en_pc": ejecutar_en_pc,
 }

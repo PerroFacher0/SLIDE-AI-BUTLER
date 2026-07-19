@@ -34,6 +34,7 @@ _PROHIBIDAS = {
     "controlar_energia", "cerrar_aplicacion", "Salir", "Auto_Modificacion",
     "crear_proyecto", "ejecutar_proyecto", "dictar", "control_ventana",
     "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "ejecutar_mision", "investigar",
+    "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
 }
 
 _tools_cache = None

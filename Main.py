@@ -37,6 +37,7 @@ from Funciones_Slide.Sistema.Co_Ingeniero import iniciar_co_ingeniero
 from Funciones_Slide.Sistema.Preparacion import iniciar_preparacion
 from Funciones_Slide.Info.Finanzas_Gastos import iniciar_vigilante_gastos
 from Funciones_Slide.Productividad.Ordenes_Condicionales import iniciar_ordenes
+from Nucleo_Slide.Monologo import iniciar_monologo
 # El enrutador de peticiones (atajos + LLM + manos libres) vive en UN solo módulo compartido
 # con Main_AlwaysOn.py: cada arreglo aplica a los dos a la vez (antes estaba duplicado y divergía).
 from Nucleo_Slide.Peticiones import Procesar_Peticion, Voz
@@ -84,6 +85,7 @@ if verificacion == "Bienvenido Marco":
     iniciar_vigilante_gastos()                         # captura tus gastos de las notis de Nequi/Nu (auto)
     iniciar_centinela()                                # detecta SyntaxError al guardar tu código (estaba muerto)
     iniciar_ordenes(hablado_del_asistente)             # recados condicionales ("en 20 min...", "cuando abra X...")
+    iniciar_monologo()                                 # mini consciencia: pensamiento interno vivo (se ve en el overlay)
     ejecutar_slide(funcion_texto=Procesar_Peticion, funcion_voz=Voz)
     
     while Activado: 

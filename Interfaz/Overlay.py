@@ -11,9 +11,9 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 # ── Parámetros ajustables ─────────────────────────────────────────────────────
-ANCHO, ALTO = 340, 230
+ANCHO, ALTO = 360, 280
 MARGEN = 20
-REFRESCO_MS = 3000
+REFRESCO_MS = 2500
 _MAX_EVENTOS = 3
 
 
@@ -29,49 +29,93 @@ def _reflexion_corta():
     try:
         from Nucleo_Slide.Reflexion import reflexion_texto
         t = (reflexion_texto() or "").replace("\n", " ").strip()
-        return (t[:140] + "…") if len(t) > 140 else t
+        return (t[:130] + "…") if len(t) > 130 else t
     except Exception:
         return ""
 
 
+def _pensamiento():
+    try:
+        from Nucleo_Slide.Monologo import pensamiento_actual
+        return (pensamiento_actual() or "").strip()
+    except Exception:
+        return ""
+
+
+def _foco_vivo(est):
+    # Foco en TIEMPO REAL desde la percepción (más fresco que el del estado del mundo).
+    try:
+        from Nucleo_Slide.Percepcion import ventana_activa
+        v = ventana_activa()
+        if v and v not in ("(desconocida)", "(escritorio)"):
+            return v
+    except Exception:
+        pass
+    return est.get("foco_actual") or "—"
+
+
 def _construir_html():
     est = _estado()
-    foco = est.get("foco_actual") or "—"
+
+    # Cabecera con "punto latiendo" (color según si Marco está presente).
+    presente = est.get("marco_presente", True)
+    punto = "#00ffcc" if presente else "#5a6b7a"
     partes = [
-        "<div style='font-size:13px;font-weight:bold;color:#00ffcc;letter-spacing:1px;'>◆ AIDEN</div>",
-        f"<div style='color:#9fb3c8;font-size:11px;margin-top:4px;'>Foco: "
-        f"<span style='color:#e6eef7;'>{_esc(foco)[:38]}</span></div>",
+        "<div style='display:flex;align-items:center;'>"
+        f"<span style='color:{punto};font-size:15px;'>●</span>"
+        "<span style='font-size:14px;font-weight:bold;color:#00ffcc;letter-spacing:2px;"
+        "margin-left:6px;'>A I D E N</span></div>",
     ]
 
+    # Pensamiento interno (el corazón vivo): frase tenue con un halo.
+    pen = _pensamiento()
+    if pen:
+        partes.append(
+            "<div style='color:#8be9fd;font-size:11px;font-style:italic;margin-top:7px;"
+            "padding:6px 8px;background:rgba(0,255,204,18);border-left:2px solid rgba(0,255,204,120);"
+            f"border-radius:4px;'>“{_esc(pen)[:120]}”</div>"
+        )
+
+    partes.append(
+        "<div style='color:#9fb3c8;font-size:11px;margin-top:7px;'>Percibo: "
+        f"<span style='color:#e6eef7;'>{_esc(_foco_vivo(est))[:40]}</span></div>"
+    )
+
     chips = []
-    if not est.get("marco_presente", True):
+    if not presente:
         chips.append("ausente")
     if est.get("en_reunion"):
         chips.append("reunión")
     if est.get("modo") and est.get("modo") != "normal":
         chips.append(est["modo"])
     if chips:
-        partes.append(f"<div style='color:#ffb454;font-size:11px;'>Estado: {_esc(', '.join(chips))}</div>")
+        partes.append(
+            "<div style='margin-top:5px;'>" + "".join(
+                f"<span style='color:#0a0e14;background:#ffb454;font-size:10px;font-weight:bold;"
+                f"padding:1px 7px;border-radius:8px;margin-right:4px;'>{_esc(c)}</span>"
+                for c in chips) + "</div>"
+        )
 
     metas = [m.get("texto", "") for m in (est.get("metas") or []) if m.get("estado") != "hecha"][:2]
     if metas:
-        partes.append("<div style='color:#9fb3c8;font-size:11px;margin-top:4px;'>Metas:</div>")
+        partes.append("<div style='color:#9fb3c8;font-size:11px;margin-top:6px;'>Metas que sigo:</div>")
         for m in metas:
-            partes.append(f"<div style='color:#c3f0e0;font-size:11px;'>· {_esc(m)[:40]}</div>")
+            partes.append(f"<div style='color:#c3f0e0;font-size:11px;'>› {_esc(m)[:42]}</div>")
 
     evs = (est.get("eventos") or [])[-_MAX_EVENTOS:]
     if evs:
-        partes.append("<div style='color:#9fb3c8;font-size:11px;margin-top:4px;'>Reciente:</div>")
+        partes.append("<div style='color:#9fb3c8;font-size:11px;margin-top:6px;'>Reciente:</div>")
         for e in reversed(evs):
             partes.append(
                 f"<div style='color:#aebfcf;font-size:10px;'>· [{_esc(e.get('hora',''))}] "
-                f"{_esc(e.get('texto',''))[:42]}</div>"
+                f"{_esc(e.get('texto',''))[:44]}</div>"
             )
 
     refl = _reflexion_corta()
     if refl:
         partes.append(
-            f"<div style='color:#7d8ea0;font-size:10px;font-style:italic;margin-top:5px;'>“{_esc(refl)}”</div>"
+            f"<div style='color:#7d8ea0;font-size:10px;font-style:italic;margin-top:6px;"
+            f"border-top:1px solid rgba(120,140,160,40);padding-top:5px;'>{_esc(refl)}</div>"
         )
     return "".join(partes)
 
@@ -100,8 +144,8 @@ class OverlayJarvis(QWidget):
         lay.addWidget(self._label)
 
         self.setStyleSheet(
-            "QWidget { background: rgba(8,12,20,205); border: 1px solid rgba(0,255,204,60);"
-            " border-radius: 12px; }"
+            "QWidget { background: rgba(6,10,18,215); border: 1px solid rgba(0,255,204,80);"
+            " border-radius: 14px; }"
         )
         self.resize(ANCHO, ALTO)
         self._reposicionar()

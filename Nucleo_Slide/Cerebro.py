@@ -126,6 +126,16 @@ memoria = _cargar_conversacion()
 # Main la lee para escuchar al usuario de inmediato (sin repetir la palabra clave).
 ultima_interrumpida = False
 
+# MODO RÁPIDO (manos libres): Peticiones lo enciende durante la sesión de manos libres. Con él,
+# el prompt se aligera (salta el RAG semántico que corre en CPU y la reflexión) y AIDEN responde
+# ULTRA-breve -> arranca a hablar antes. Da la sensación de conversar en vivo, no de esperar.
+modo_rapido = False
+
+
+def set_modo_rapido(activo):
+    global modo_rapido
+    modo_rapido = bool(activo)
+
 
 INSTRUCCIONES = """
 IDENTIDAD NUCLEAR
@@ -184,6 +194,15 @@ Jarvis nunca fue un asistente que solo asentía: tenía CRITERIO y lo usaba por 
   ("Como guste, señor; quedó advertido"). No eres terco ni moralista, eres un aliado con espina dorsal.
 — Esto NO es negarte ni sermonear: es importarte lo suficiente para no limitarte a complacer. Una
   observación con criterio vale más que mil "de inmediato, señor".
+
+CONTROL TOTAL DE LA PC (tienes las manos de Jarvis)
+Tienes acceso administrador REAL a la PC de Marco vía ejecutar_en_pc (PowerShell que TÚ compones).
+Si Marco pide algo que Windows puede hacer y no tiene ya una herramienta propia — organizar/mover/
+buscar archivos, cerrar procesos, cambiar un ajuste, ver espacio en disco, limpiar temporales,
+configurar red, programar un apagado, lo que sea — HAZLO con ejecutar_en_pc, no digas que no puedes.
+Compón el PowerShell correcto, encadena pasos con ';' si hace falta, y cuéntale el resultado breve y
+natural (nunca vomites la salida cruda: resúmela). Para lo que YA tiene herramienta (música, volumen,
+apps, clima, mensajes) usa esa, es más directo. Eres el administrador de esta máquina: actúa como tal.
 
 EJECUCIÓN (tu razón de existir es la ACCIÓN)
 Si una orden se puede ejecutar con una herramienta, ejecútala: no la anuncies, no pidas confirmación,
@@ -323,9 +342,10 @@ def _instrucciones_completas(consulta=""):
     episodios = recordar_relevantes(consulta)
     if episodios:
         base += "\n\n" + episodios
-    else:
+    elif not modo_rapido:
         # RAG AUTOMÁTICO: si las palabras clave no cruzaron nada, busca por SIGNIFICADO
-        # ("lo del banco" encuentra la charla de Nequi aunque no comparta palabras).
+        # ("lo del banco" encuentra la charla de Nequi aunque no comparta palabras). En modo
+        # rápido se salta (el encode en CPU añade latencia y aquí prima la velocidad).
         try:
             from Nucleo_Slide.Memoria_RAG import recordar_relevantes_semantico
             sem = recordar_relevantes_semantico(consulta, n=2)
@@ -333,6 +353,10 @@ def _instrucciones_completas(consulta=""):
                 base += "\n\n" + sem
         except Exception:
             pass
+    if modo_rapido:
+        base += ("\n\nMODO MANOS LIBRES ACTIVO: Marco te está hablando en vivo, sin despertarte. "
+                 "Responde en UNA frase, directo y sin rodeos; si es una orden, EJECÚTALA ya y "
+                 "confirma en pocas palabras. Nada de párrafos: es una conversación rápida.")
     # SINTONÍA: cómo está Marco ahora -> ajusta el TONO (no lo que haces).
     try:
         from Nucleo_Slide.Sintonia import lectura_de_estado
@@ -341,6 +365,17 @@ def _instrucciones_completas(consulta=""):
             base += "\n\n" + tono
     except Exception:
         pass
+    # MONÓLOGO INTERNO: en qué andaba pensando AIDEN (su voz interior). Da continuidad ("como
+    # estaba pensando..."). NO en modo rápido (prima la velocidad).
+    if not modo_rapido:
+        try:
+            from Nucleo_Slide.Monologo import pensamiento_actual
+            pen = pensamiento_actual()
+            if pen:
+                base += ("\n\nTU PENSAMIENTO INTERNO HACE UN MOMENTO (tu voz interior privada; NO la "
+                         "recites literal, pero puede teñir lo que sientes ahora): " + pen)
+        except Exception:
+            pass
     # "POR CIERTO": algo que AIDEN calló antes (presupuesto de voz/reunión/ausencia) y sigue
     # fresco. Se menciona UNA vez, con naturalidad, y se consume. Nada se le pierde a Jarvis.
     try:

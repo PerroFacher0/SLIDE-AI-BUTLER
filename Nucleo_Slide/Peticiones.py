@@ -171,6 +171,14 @@ def extraer_comando_tras_wake(texto):
     return p if len(p) >= 3 else ""
 
 
+def _set_modo_rapido(activo):
+    try:
+        from Nucleo_Slide.Cerebro import set_modo_rapido
+        set_modo_rapido(activo)
+    except Exception:
+        pass
+
+
 def _cerrar_taller_silencioso():
     # Al descansar o despedir el día, la sesión de taller (si la hay) se cierra sola.
     try:
@@ -229,20 +237,24 @@ def Procesar_Peticion(texto, ventana):
         elif tipo == "manos_on":
             _manos_libres = True
             _silencios_manos_libres = 0
+            _set_modo_rapido(True)      # LLM en modo veloz mientras dure la sesión
             respuesta_slide = random.choice(_R_MANOS_ON)
         elif tipo == "manos_off":
             _manos_libres = False
             _silencios_manos_libres = 0
+            _set_modo_rapido(False)
             respuesta_slide = random.choice(_R_MANOS_OFF)
         elif tipo == "buenas_noches":
             # Fin del DÍA (no solo ocultar): despedida cálida que reconoce tu día + se oculta.
             _manos_libres = False
+            _set_modo_rapido(False)
             _cerrar_taller_silencioso()
             respuesta_slide = despedida_del_dia()
             ventana.pedir_fijar.emit(False)
             ventana.pedir_ocultar.emit()
         elif tipo == "descansa":
             _manos_libres = False
+            _set_modo_rapido(False)
             _cerrar_taller_silencioso()
             ventana.pedir_fijar.emit(False)
             ventana.pedir_ocultar.emit()
@@ -306,6 +318,7 @@ def Procesar_Peticion(texto, ventana):
                     continue   # mic sigue abierto, no exige palabra clave
                 _manos_libres = False
                 _silencios_manos_libres = 0
+                _set_modo_rapido(False)
                 hablado_del_asistente("Llevamos un rato en silencio, señor; salgo del modo manos libres.")
             break
 
