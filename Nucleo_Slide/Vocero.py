@@ -25,6 +25,8 @@ _lock = threading.RLock()
 _marcas = deque(maxlen=MAX_POR_HORA)   # timestamps de lo dicho en la última hora
 _ultimo = 0                            # timestamp de la última intervención
 _recientes = deque(maxlen=8)           # textos recientes (dedup)
+_calladas = deque(maxlen=5)            # (t, texto) silenciados -> "por cierto..." en la próxima charla
+_CALLADA_FRESCA = 30 * 60              # solo vale la pena mencionarlo si pasó hace <30 min
 
 
 def _estado():
@@ -36,12 +38,27 @@ def _estado():
 
 
 def _registrar_silenciado(texto, origen):
-    # No se dijo en voz, pero queda en el hilo de conciencia (no se pierde la info).
+    # No se dijo en voz, pero queda en el hilo de conciencia (no se pierde la info) y en la
+    # cola del "por cierto" (el cerebro lo menciona con naturalidad en la próxima charla).
+    with _lock:
+        _calladas.append((time.time(), texto))
     try:
         from Nucleo_Slide.Estado_Del_Mundo import registrar_evento
         registrar_evento(f"(callado para no molestar) {texto}", origen or "vocero")
     except Exception:
         pass
+
+
+def pendiente_para_mencionar():
+    """Devuelve (y CONSUME) lo callado más reciente que siga fresco, o "". Para que el cerebro
+    lo suelte como 'Por cierto, señor...' en la siguiente interacción — una sola vez."""
+    with _lock:
+        while _calladas:
+            t, texto = _calladas.pop()          # el más reciente primero
+            if time.time() - t <= _CALLADA_FRESCA:
+                _calladas.clear()               # lo demás ya es historia; no acumular loros
+                return texto
+        return ""
 
 
 def emitir(hablar, texto, origen="", prioridad="normal"):

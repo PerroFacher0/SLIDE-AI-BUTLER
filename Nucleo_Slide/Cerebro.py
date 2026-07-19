@@ -63,7 +63,15 @@ MAX_REINTENTOS = 5   # reintentos si el API devuelve finish_reason='error' (rach
 # confianza), el CÓDIGO escala el problema a Pro (gemini-2.5-pro) en un disparo con todo el contexto.
 ESCALADO_AUTO = True            # activar/desactivar el escalado automático a Pro
 AUTOEVALUACION = True           # (solo texto/Telegram) Flash se autocalifica y escala si está inseguro
-_FRASE_ESCALADO = "Un segundo, señor, estoy consultando un análisis más profundo."
+_FRASES_ESCALADO = (
+    "Un segundo, señor, estoy consultando un análisis más profundo.",
+    "Déjeme pensarlo con calma, señor; esto merece mi mejor cerebro.",
+    "Un momento; llamo a mis refuerzos analíticos, señor.",
+)
+
+
+def _frase_escalado():
+    return random.choice(_FRASES_ESCALADO)
 # Señales de TITUBEO de Flash (curadas para NO chocar con frases normales como "no se preocupe").
 _FRASES_INSEGURAS = (
     "no estoy seguro", "no estoy segura", "no estoy completamente seguro", "no estoy del todo seguro",
@@ -226,6 +234,10 @@ PROTOCOLO DE REPETICIÓN
 "Hazlo otra vez" / "repite" / "de nuevo" → ejecuta inmediatamente el último JSON
 con parámetros idénticos, sin confirmación previa.
 
+RECADOS CONDICIONALES
+"En 20 minutos dime X" / "a las 9:30 recuérdame Y" / "cuando abra Chrome recuérdame Z" →
+usa programar_orden (tipo tiempo o app). El recado se dispara SOLO cuando se cumpla la condición.
+
 PROTOCOLOS PERSONALIZADOS (tu "Mark VII") Y MODO TALLER
 — Si Marco te ENSEÑA una rutina ("crea un protocolo X: haz A, B y C"), usa crear_protocolo con el
   nombre y los pasos; queda aprendida para siempre. Cuando la invoque (el nombre o "activa X"), usa
@@ -294,12 +306,33 @@ def _instrucciones_completas(consulta=""):
     episodios = recordar_relevantes(consulta)
     if episodios:
         base += "\n\n" + episodios
+    else:
+        # RAG AUTOMÁTICO: si las palabras clave no cruzaron nada, busca por SIGNIFICADO
+        # ("lo del banco" encuentra la charla de Nequi aunque no comparta palabras).
+        try:
+            from Nucleo_Slide.Memoria_RAG import recordar_relevantes_semantico
+            sem = recordar_relevantes_semantico(consulta, n=2)
+            if sem:
+                base += "\n\n" + sem
+        except Exception:
+            pass
     # SINTONÍA: cómo está Marco ahora -> ajusta el TONO (no lo que haces).
     try:
         from Nucleo_Slide.Sintonia import lectura_de_estado
         tono = lectura_de_estado(consulta)
         if tono:
             base += "\n\n" + tono
+    except Exception:
+        pass
+    # "POR CIERTO": algo que AIDEN calló antes (presupuesto de voz/reunión/ausencia) y sigue
+    # fresco. Se menciona UNA vez, con naturalidad, y se consume. Nada se le pierde a Jarvis.
+    try:
+        from Nucleo_Slide.Vocero import pendiente_para_mencionar
+        pend = pendiente_para_mencionar()
+        if pend:
+            base += ("\n\nTENÍAS ALGO GUARDADO POR DECIR (lo callaste antes para no interrumpir; "
+                     "si viene al caso, ciérralo con un 'Por cierto, señor...' breve y natural — "
+                     "si no pega con el tema, dilo igual al final en una frase): " + pend)
     except Exception:
         pass
     return base
@@ -349,6 +382,16 @@ _MURMULLOS = (
     "Un momento, señor.", "Enseguida se lo tengo.", "Déjeme ver...", "Voy con ello, señor.",
     "Un segundo, lo consulto.", "Permítame un instante.",
 )
+
+# Herramientas de SOLO LECTURA (consultan datos, no tocan la pantalla ni ejecutan acciones):
+# cuando el modelo pide varias de estas en una tanda, se corren EN PARALELO (clima + noticias +
+# acciones llegan a la vez, no en fila india). Las de UI/acción siguen en orden estricto.
+_TOOLS_PARALELAS = {
+    "clima", "buscar_en_internet", "consultar_accion", "mis_acciones", "noticias_del_dia",
+    "calculadora", "convertir_moneda", "estado_sistema", "mis_gastos", "leer_notas",
+    "recordar_conversacion", "recordar_a_fondo", "resumen_actividad", "leer_portapapeles",
+    "buscar_archivo", "ver_apps_abiertas",
+}
 
 
 def _es_error_tool(resultado):
@@ -464,7 +507,8 @@ def proceso_de_ia(texto_de_whisper):
     texto_final = ""
 
     hubo_error = False
-    murmuro = False   # ya soltó el "un momento, señor" este turno (máx 1 vez)
+    murmuro = False        # ya soltó el "un momento, señor" este turno (máx 1 vez)
+    errores_seguidos = 0   # rondas consecutivas con una herramienta fallando (self-healing)
     for _ronda in range(MAX_RONDAS):
         texto_acumulado = ""
         buffer_frase = ""
@@ -556,16 +600,31 @@ def proceso_de_ia(texto_de_whisper):
                     and any(tc['function']['name'] in _TOOLS_LENTAS for tc in tool_calls_list)):
                 decir(random.choice(_MURMULLOS))
                 murmuro = True
+            nombres = [tc['function']['name'] for tc in tool_calls_list]
+            if len(tool_calls_list) > 1 and all(n in _TOOLS_PARALELAS for n in nombres):
+                # Varias consultas de SOLO LECTURA -> en PARALELO (mucho más rápido).
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=min(4, len(tool_calls_list))) as _ex:
+                    resultados = list(_ex.map(
+                        lambda tc: _ejecutar_tool_call(tc['function']['name'],
+                                                       tc['function']['arguments']),
+                        tool_calls_list))
+            else:
+                resultados = [_ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
+                              for tc in tool_calls_list]
             hubo_error_tool = False
-            for tc in tool_calls_list:
-                resultado = _ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
+            for tc, resultado in zip(tool_calls_list, resultados):
                 print(f"Resultado de {tc['function']['name']}: {resultado}")
                 if _es_error_tool(resultado):
                     hubo_error_tool = True
                 memoria.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': resultado})
-            # Si una herramienta FALLÓ, escala el cuello de botella a Pro (análisis más profundo).
-            if ESCALADO_AUTO and hubo_error_tool and not ultima_interrumpida:
-                decir(_FRASE_ESCALADO)
+            # SELF-HEALING: si una herramienta falló, PRIMERO Flash ve el error en la siguiente
+            # ronda y se corrige solo (otros argumentos, otra herramienta, o lo explica) — como
+            # Jarvis: diagnostica antes de rendirse. Solo si falla DOS rondas seguidas (atascado
+            # de verdad) escala a Pro. Antes escalaba al primer error: lento y derrotista.
+            errores_seguidos = errores_seguidos + 1 if hubo_error_tool else 0
+            if ESCALADO_AUTO and errores_seguidos >= 2 and not ultima_interrumpida:
+                decir(_frase_escalado())
                 pro = _escalar_a_pro(texto_de_whisper, memoria)
                 if pro:
                     for _fr in re.split(r'(?<=[.!?])\s+', pro):
@@ -581,7 +640,7 @@ def proceso_de_ia(texto_de_whisper):
                 texto_final = texto_acumulado.strip()
                 # TITUBEO: Flash dudó -> verifica con Pro (continuación; lo anterior ya se habló).
                 if ESCALADO_AUTO and _respuesta_insegura(texto_final) and not ultima_interrumpida:
-                    decir(_FRASE_ESCALADO)
+                    decir(_frase_escalado())
                     pro = _escalar_a_pro(texto_de_whisper, memoria)
                     if pro:
                         for _fr in re.split(r'(?<=[.!?])\s+', pro):
@@ -592,7 +651,7 @@ def proceso_de_ia(texto_de_whisper):
                 # MALFORMED tras reintentos: en vez de un mensaje vacío, escala a Pro.
                 pro = ""
                 if ESCALADO_AUTO and not ultima_interrumpida:
-                    decir(_FRASE_ESCALADO)
+                    decir(_frase_escalado())
                     pro = _escalar_a_pro(texto_de_whisper, memoria)
                     for _fr in re.split(r'(?<=[.!?])\s+', pro):
                         if _fr.strip():

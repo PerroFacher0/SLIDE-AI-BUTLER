@@ -1,5 +1,6 @@
 import os as os
 import speech_recognition as sr
+import threading
 import time
 from Voz_Slide.Herramientas_del_asistente import buscar_microfono, marcar_fin_peticion
 from faster_whisper import WhisperModel
@@ -12,16 +13,31 @@ instancia = sr.Recognizer()
 # 1.5s de silencio para dar por terminada la frase (antes 2s: medio segundo de espera muerta
 # en CADA turno antes de siquiera empezar a transcribir).
 instancia.pause_threshold = 1.5
-print("Cargando Modelo...")
 # large-v3-turbo: calidad de large-v3 con velocidad de medium (~1.7 GB VRAM en int8_float16).
 # Sube MUCHO el oído en español vs "small" (que era PEOR que el "medium" del wake-word del VAD).
 _MODELO_VOZ = "large-v3-turbo"
-model = WhisperModel(_MODELO_VOZ, device="cuda", compute_type="int8_float16")
+
+# ARRANQUE PARALELO: el modelo carga en un HILO mientras el resto del arranque avanza (login
+# facial, Kokoro, interfaz). Antes bloqueaba el import y todo cargaba en fila india.
+model = None
+
+
+def _cargar_en_fondo():
+    global model
+    print("Cargando Modelo (en paralelo)...")
+    model = WhisperModel(_MODELO_VOZ, device="cuda", compute_type="int8_float16")
+    print("Oído listo (large-v3-turbo).")
+
+
+_hilo_carga = threading.Thread(target=_cargar_en_fondo, daemon=True)
+_hilo_carga.start()
 
 
 def _asegurar_modelo():
-    # Recarga el Whisper de voz si fue descargado (p. ej. en modo gaming).
+    # Espera la carga en paralelo si aún no termina; recarga si fue descargado (modo gaming).
     global model
+    if model is None and _hilo_carga.is_alive():
+        _hilo_carga.join()
     if model is None:
         print("Recargando Whisper (voz)...")
         model = WhisperModel(_MODELO_VOZ, device="cuda", compute_type="int8_float16")

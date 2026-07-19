@@ -16,6 +16,7 @@ from Funciones_Slide.Info.Investigacion import investigar
 from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
 from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_protocolo
 from Funciones_Slide.Sistema.Taller import modo_taller
+from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -836,6 +837,23 @@ tools = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "programar_orden",
+            "description": "RECADOS CONDICIONALES de Marco: 'en 20 minutos dime que saque la pizza', 'a las 9:30 recuérdame llamar a mamá', 'cuando abra Chrome recuérdame revisar el correo'. Guardas el recado y AIDEN lo dice SOLO cuando la condición se cumpla. También listar y cancelar. Distinta de tomar_nota (eso es apuntar, esto es DISPARAR un aviso).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {"type": "string", "description": "tiempo (minutos u hora) | app (cuando esa app esté en foco)"},
+                    "valor": {"type": "string", "description": "Si tiempo: minutos (ej. '20') u hora (ej. '21:30'). Si app: nombre de la app (ej. 'chrome')."},
+                    "recado": {"type": "string", "description": "QUÉ recordarle a Marco cuando dispare."},
+                    "accion": {"type": "string", "description": "crear (por defecto) | listar | cancelar (con recado = subcadena a borrar)"}
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -893,4 +911,5 @@ tools_map = {
     "mis_gastos": mis_gastos,
     "crear_protocolo": crear_protocolo,
     "modo_taller": modo_taller,
+    "programar_orden": programar_orden,
 }

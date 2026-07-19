@@ -54,12 +54,19 @@ _R_MANOS_OFF = ("Modo manos libres desactivado, señor. Volveré a esperar la pa
 # "¿Estado?" estilo Iron Man: reporte instantáneo SIN LLM. Solo frases exactas (no
 # secuestrar "estado de mi cuenta...", que va al cerebro).
 _PEDIR_ESTADO = {"estado", "status", "reporte", "informe", "como vamos", "como estamos",
-                 "reporte de estado", "estado del sistema", "dame el estado", "dame un reporte"}
+                 "reporte de estado", "estado del sistema", "dame el estado", "dame un reporte",
+                 "como estas", "como te sientes", "todo bien"}
+_T0 = __import__("time").time()   # arranque (para el uptime del informe)
 
 
 def _informe_estado():
-    # Reporte crisp: sistemas + dónde está Marco + metas. Todo local, cero LLM.
-    partes = ["En línea, señor."]
+    # Reporte crisp: salud propia + sistemas + dónde está Marco + metas. Todo local, cero LLM.
+    import threading
+    import time
+    up = int((time.time() - _T0) / 60)
+    uptime = f"{up // 60}h {up % 60}m" if up >= 60 else f"{up} minutos"
+    partes = [f"Todos mis sistemas operativos, señor: llevo {uptime} en pie y "
+              f"{threading.active_count()} hilos trabajando para usted."]
     try:
         from Funciones_Slide.Sistema.Funciones_Sistema import estado_sistema
         partes.append(str(estado_sistema()))
