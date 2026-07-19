@@ -78,35 +78,13 @@ def pausar_conciencia(pausar=True):
     _pausado = bool(pausar)
 
 
-def _ventana_activa():
-    try:
-        import win32gui
-        return win32gui.GetWindowText(win32gui.GetForegroundWindow()) or "(escritorio)"
-    except Exception:
-        return "(desconocida)"
+# Los SENTIDOS viven en Nucleo_Slide.Percepcion (compartidos con el cerebro de conversación).
+from Nucleo_Slide.Percepcion import ventana_activa as _ventana_activa
 
 
 def _apps_abiertas():
-    titulos = []
-    try:
-        import win32gui
-
-        def _cb(hwnd, _):
-            if win32gui.IsWindowVisible(hwnd):
-                t = win32gui.GetWindowText(hwnd)
-                if t and t.strip():
-                    titulos.append(t.strip())
-
-        win32gui.EnumWindows(_cb, None)
-    except Exception:
-        pass
-    # dedup conservando orden, máx 12
-    vistos, salida = set(), []
-    for t in titulos:
-        if t not in vistos:
-            vistos.add(t)
-            salida.append(t)
-    return salida[:12]
+    from Nucleo_Slide.Percepcion import apps_abiertas
+    return apps_abiertas(12)
 
 
 def _en_reunion():

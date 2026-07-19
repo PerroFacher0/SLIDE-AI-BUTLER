@@ -125,9 +125,19 @@ def recargar_kokoro():
     _asegurar_kokoro()
 
 
+def _prosodia(hora=None):
+    # VOZ VIVA: de noche AIDEN habla un punto más calmado y suave (velocidad, volumen).
+    # Jarvis no suena igual a las 3 de la tarde que a las 2 de la mañana.
+    h = time.localtime().tm_hour if hora is None else hora
+    if h >= 22 or h < 7:
+        return 0.95, 0.8
+    return 1.0, 1.0
+
+
 def _generar_audio(frase, cola):
     _asegurar_kokoro()
-    audios = [audio for _, _, audio in pipeline(frase, voice=voz_mezclada, speed=1)]
+    velocidad, volumen = _prosodia()
+    audios = [audio * volumen for _, _, audio in pipeline(frase, voice=voz_mezclada, speed=velocidad)]
     cola.put(audios)
 
 
