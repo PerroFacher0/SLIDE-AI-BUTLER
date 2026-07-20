@@ -201,6 +201,28 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
     if p.strip(" ?¿") in _PEDIR_ESTADO:
         return ("estado", None)
 
+    # REDACTOR: "escríbeme un ensayo sobre X" / "hazme un informe de Y" -> escribe el documento y lo guarda.
+    mr = re.search(r"(?:escribe|escribeme|hazme|redacta|redactame|arma|armame|prepara|preparame)"
+                   r"(?:me)?\s+(?:un |una |el |la )?"
+                   r"(ensayo|informe|reporte|carta|correo|resumen|discurso|resena|articulo|"
+                   r"texto|documento|monografia|redaccion)\b(.*)", p)
+    if mr and mr.group(2).strip(" ,.:") and len(mr.group(2).strip(" ,.:sobredeparaacerc")) >= 3:
+        tipo = mr.group(1)
+        tema = re.sub(r"^\s*(sobre|de|acerca de|para|del|de la|que trate de)\s+", "",
+                      mr.group(2).strip(" ,.:")).strip()
+        if len(tema) >= 3:
+            return ("redactar", (tipo, tema))
+
+    # SOLUCIONADOR VISUAL: "resuelve esto" / "ayúdame con este problema" -> lo resuelve con el experto.
+    if any(k in p for k in ("resuelve lo que ves", "resuelve lo que tengo en la camara",
+                            "que ves en la camara")):
+        return ("resolver", "camara")
+    if any(k in p for k in ("resuelve esto", "resuelve el problema", "resuelve lo que hay en pantalla",
+                            "resuelve el ejercicio", "ayudame con este problema", "ayudame con esto",
+                            "como resuelvo esto", "resuelveme esto", "explicame esto que tengo",
+                            "resuelve la pregunta")):
+        return ("resolver", "pantalla")
+
     # MODO AGENTE: "encárgate de X" -> AIDEN cumple la meta sola. Captura el objetivo (lo que sigue).
     for gatillo in ("encargate de ", "ocupate de ", "hazte cargo de ", "modo agente ",
                     "encargate ", "resuelveme "):
@@ -432,6 +454,17 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
             respuesta_slide = _informe_estado()
+        elif tipo == "redactar":
+            _tipo_doc, _tema = dato
+            hablado_del_asistente(random.choice(
+                ("Déjeme escribirlo, señor; un momento.", "Me pongo a redactarlo, señor.",
+                 "Enseguida se lo tengo, señor.")))
+            from Funciones_Slide.Info.Redactor import redactar_documento
+            respuesta_slide = redactar_documento(_tema, _tipo_doc)
+        elif tipo == "resolver":
+            hablado_del_asistente("Déjeme verlo, señor.")
+            from Funciones_Slide.Info.Estudio import resolver_visual
+            respuesta_slide = resolver_visual(dato)
         elif tipo == "agente":
             # AIDEN se encarga de la meta completa (narra el avance él mismo por voz).
             from Nucleo_Slide.Agente import modo_agente

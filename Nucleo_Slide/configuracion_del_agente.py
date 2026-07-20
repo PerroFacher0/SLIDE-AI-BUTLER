@@ -23,6 +23,8 @@ from Funciones_Slide.Sistema.Sesion import restaurar_sesion
 from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
 from Funciones_Slide.Info.Web import abrir_web
 from Funciones_Slide.Sistema.Windows_Admin import matar_proceso, volumen_exacto, brillo_exacto
+from Funciones_Slide.Info.Redactor import redactar_documento
+from Funciones_Slide.Info.Estudio import resolver_visual
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -977,6 +979,36 @@ tools = [
                 "required": ["nivel"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "redactar_documento",
+            "description": "Escribe un DOCUMENTO completo y lo guarda en Word (y lo abre): ensayo, informe, carta, correo, resumen, discurso, reseña, artículo. Úsala cuando Marco diga 'escríbeme un ensayo sobre X', 'hazme un informe de Y', 'redacta una carta para Z', 'escríbeme un correo diciendo...'. TÚ defines el tipo y el tema a partir de lo que pide.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tema": {"type": "string", "description": "El tema/contenido sobre el que escribir (todo el detalle que dé Marco)."},
+                    "tipo": {"type": "string", "description": "ensayo | informe | carta | correo | resumen | discurso | reseña | artículo | documento"}
+                },
+                "required": ["tema"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolver_visual",
+            "description": "Mira lo que Marco tiene en PANTALLA (o en la cámara) y lo RESUELVE/explica a fondo con el cerebro experto: un problema de mates/física, una pregunta, un texto difícil, un error de código. Úsala cuando diga 'resuelve esto', 'ayúdame con este problema', 'cómo resuelvo esto', 'explícame esto que tengo aquí'. Distinta de analizar_pantalla (que solo describe).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fuente": {"type": "string", "description": "pantalla (por defecto) | camara"},
+                    "consulta": {"type": "string", "description": "Opcional: la duda concreta de Marco."}
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -1044,4 +1076,6 @@ tools_map = {
     "matar_proceso": matar_proceso,
     "volumen_exacto": volumen_exacto,
     "brillo_exacto": brillo_exacto,
+    "redactar_documento": redactar_documento,
+    "resolver_visual": resolver_visual,
 }
