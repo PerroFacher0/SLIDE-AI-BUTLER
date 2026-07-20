@@ -118,6 +118,14 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
     if p.strip(" ?¿") in _PEDIR_ESTADO:
         return ("estado", None)
 
+    # MODO AGENTE: "encárgate de X" -> AIDEN cumple la meta sola. Captura el objetivo (lo que sigue).
+    for gatillo in ("encargate de ", "ocupate de ", "hazte cargo de ", "modo agente ",
+                    "encargate ", "resuelveme "):
+        if p.startswith(gatillo):
+            objetivo = original[len(gatillo):].strip()
+            if len(objetivo) >= 4:
+                return ("agente", objetivo)
+
     # RETOMEMOS: reabrir el espacio de trabajo (sin LLM).
     if any(k in p for k in ("retomemos", "retomar sesion", "restaura mi sesion", "restaurar sesion",
                             "abre lo de antes", "donde lo deje")):
@@ -261,6 +269,12 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
             respuesta_slide = _informe_estado()
+        elif tipo == "agente":
+            # AIDEN se encarga de la meta completa (narra el avance él mismo por voz).
+            from Nucleo_Slide.Agente import modo_agente
+            respuesta_slide = modo_agente(dato, hablar=hablado_del_asistente)
+            ya_hablado = True                     # el agente ya narró y dijo el reporte final
+            cerebro.ultima_interrumpida = False   # evita un barge-in fantasma tras la misión
         elif tipo == "retomar":
             from Funciones_Slide.Sistema.Sesion import restaurar_sesion
             respuesta_slide = restaurar_sesion()
