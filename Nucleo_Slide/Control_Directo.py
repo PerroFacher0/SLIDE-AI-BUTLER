@@ -52,9 +52,15 @@ _INSTANT = {
     "captura": ("captura", "pantallazo", "toma una captura", "captura de pantalla", "haz una captura"),
     "mute": ("silencia", "mutea", "quita el sonido", "silencio", "silencia el equipo"),
     "unmute": ("activa el sonido", "quita el silencio", "vuelve el sonido", "reactiva el sonido"),
-    "vol_up": ("sube el volumen", "mas volumen", "sube el sonido", "sube volumen"),
-    "vol_down": ("baja el volumen", "menos volumen", "baja el sonido", "baja volumen"),
+    "vol_up": ("sube el volumen", "mas volumen", "sube el sonido", "sube volumen", "sube el audio"),
+    "vol_down": ("baja el volumen", "menos volumen", "baja el sonido", "baja volumen", "baja el audio"),
     "vol_max": ("volumen al maximo", "maximo volumen", "sube el volumen al maximo"),
+    "brillo_up": ("sube el brillo", "mas brillo", "aumenta el brillo", "sube el brillo de la pantalla"),
+    "brillo_down": ("baja el brillo", "menos brillo", "reduce el brillo", "baja el brillo de la pantalla"),
+    "taskmgr": ("abre el administrador de tareas", "administrador de tareas", "abre el task manager"),
+    "ajustes": ("abre la configuracion", "abre los ajustes", "abre ajustes", "abre configuracion"),
+    "calc": ("abre la calculadora", "calculadora", "abre calculadora"),
+    "notepad": ("abre el bloc de notas", "bloc de notas", "abre notepad", "abre el bloc"),
 }
 
 
@@ -117,6 +123,31 @@ def ejecutar_instantanea(accion):
         if accion == "vol_max":
             _sendkey(175, 50)
             return "Volumen al máximo, señor."
+        if accion in ("brillo_up", "brillo_down"):
+            try:
+                from Funciones_Slide.Sistema.Control_PC import ajustar_brillo
+                ajustar_brillo("subir" if accion == "brillo_up" else "bajar")
+            except Exception:
+                # respaldo directo por WMI si la herramienta no aplica
+                signo = "+20" if accion == "brillo_up" else "-20"
+                _run_async(["powershell", "-NoProfile", "-Command",
+                            "$b=(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness)."
+                            f"CurrentBrightness; $n=[Math]::Max(0,[Math]::Min(100,$b{signo})); "
+                            "(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods)."
+                            "WmiSetBrightness(1,$n)"])
+            return "Brillo arriba, señor." if accion == "brillo_up" else "Brillo abajo, señor."
+        if accion == "taskmgr":
+            _run_async(["taskmgr.exe"])
+            return "Administrador de tareas abierto, señor."
+        if accion == "ajustes":
+            _run_async(["explorer.exe", "ms-settings:"])
+            return "Ahí tiene la configuración, señor."
+        if accion == "calc":
+            _run_async(["calc.exe"])
+            return "Calculadora lista, señor."
+        if accion == "notepad":
+            _run_async(["notepad.exe"])
+            return "Bloc de notas abierto, señor."
     except Exception as e:
         return f"No pude, señor: {e}"
     return "No reconocí esa acción, señor."
@@ -154,6 +185,10 @@ def control_directo(instruccion):
         return "Eso no me sonó a una acción del PC, señor. ¿Lo repite de otra forma?"
     from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
     res = str(ejecutar_en_pc(cmd, descripcion=f"control por voz: {instruccion[:50]}"))
+    # Fluidez: si fue una ACCIÓN (sin salida útil), confirma en una palabra; si devolvió un DATO, lo da.
     if res.startswith("Hecho, señor") or not res.strip():
-        return "Hecho, señor."
+        import random
+        return random.choice(("Hecho.", "Listo, señor.", "Ya está.", "Hecho, señor.", "Cumplido."))
+    if res.startswith(("Me niego", "El comando terminó con error", "No pude")):
+        return res[:300]
     return res[:400]

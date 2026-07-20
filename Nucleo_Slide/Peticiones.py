@@ -17,6 +17,7 @@
 # (y probarlo) sin levantar CUDA ni el micrófono.
 
 import random
+import re
 
 _TILDES = str.maketrans("áéíóúüÁÉÍÓÚÜñ", "aeiouuAEIOUUn")
 
@@ -24,6 +25,23 @@ _TILDES = str.maketrans("áéíóúüÁÉÍÓÚÜñ", "aeiouuAEIOUUn")
 def _plano(texto):
     # minúsculas y sin tildes (mismo largo por posición: sirve para recortar el original).
     return str(texto or "").strip().lower().translate(_TILDES)
+
+
+# Tipos de atajo que se pueden ENCADENAR (son "hacer algo y devolver texto", sin tocar la ventana).
+_ENCADENABLES = {"instant", "abrir", "musica", "musica_contextual", "control_directo", "estado"}
+# Conectores que separan varias órdenes en una misma frase.
+_SEP_ORDENES = re.compile(r"\s*(?:,|;|\s+y luego\s+|\s+luego\s+|\s+despues\s+|\s+y despues\s+|"
+                          r"\s+tambien\s+|\s+y tambien\s+|\s+y\s+)\s*", re.IGNORECASE)
+
+
+def _dividir_ordenes(texto):
+    # Parte "abre spotify y sube el volumen" -> ["abre spotify", "sube el volumen"]. Sobre el texto
+    # SIN tildes para que el conector pegue ("después"/"tambien" con o sin tilde).
+    plano = _plano(texto)
+    if not any(s in plano for s in (",", ";", " y ", " luego ", " despues ", " tambien ")):
+        return [texto]
+    fragmentos = [f.strip(" ,.;") for f in _SEP_ORDENES.split(plano) if f and f.strip(" ,.;")]
+    return fragmentos if len(fragmentos) > 1 else [texto]
 
 
 # --- Modo manos libres (estado de sesión, compartido por los dos Main) -------
@@ -98,6 +116,15 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
             original = original[len(pref):]
             p = p[len(pref):]
             break
+
+    # ÓRDENES EN CADENA: varias en una frase ("abre spotify, sube el volumen y minimiza todo").
+    # Solo si TODAS las partes son atajos encadenables (si alguna es charla/tarea, va entera al cerebro,
+    # que ya sabe encadenar herramientas). Recursivo pero sin bucle (los fragmentos ya no traen conectores).
+    fragmentos = _dividir_ordenes(original)
+    if len(fragmentos) > 1:
+        sub = [decidir_atajo(f, llamada_activa, hay_error_codigo, modo_control) for f in fragmentos[:6]]
+        if all(t in _ENCADENABLES for t, _ in sub):
+            return ("cadena", sub)
 
     # Encender/apagar el MODO CONTROL (control de toda la PC casi instantáneo).
     if any(k in p for k in ("modo control", "control por voz", "controla mi pc", "controla el pc",
@@ -207,6 +234,36 @@ def extraer_comando_tras_wake(texto):
     return p if len(p) >= 3 else ""
 
 
+def _correr_uno(tipo, dato):
+    # Ejecuta UN atajo encadenable y devuelve su confirmación (texto).
+    try:
+        if tipo == "instant":
+            from Nucleo_Slide.Control_Directo import ejecutar_instantanea
+            return ejecutar_instantanea(dato)
+        if tipo == "abrir":
+            from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Apps
+            return Abrir_Apps(dato)
+        if tipo == "musica":
+            from Funciones_Slide.Sistema.Funciones_Sistema import control_musica
+            return control_musica(dato)
+        if tipo == "musica_contextual":
+            return _musica_contextual()
+        if tipo == "control_directo":
+            from Nucleo_Slide.Control_Directo import control_directo
+            return control_directo(dato)
+        if tipo == "estado":
+            return _informe_estado()
+    except Exception:
+        return ""
+    return ""
+
+
+def _correr_cadena(sub):
+    # Ejecuta varias órdenes en orden y junta las confirmaciones en una frase fluida.
+    partes = [_correr_uno(t, d) for t, d in sub]
+    return " ".join(p for p in partes if p)
+
+
 def _musica_contextual():
     # "Pon lo mío": elige música según en qué está Marco y qué hora es (cero LLM).
     import datetime as _dt
@@ -276,7 +333,10 @@ def Procesar_Peticion(texto, ventana):
                                    hay_error_codigo=estado_aiden["hay_error"],
                                    modo_control=_modo_control)
 
-        if tipo == "instant":
+        if tipo == "cadena":
+            # Varias órdenes en una frase, ejecutadas en orden (fluidez).
+            respuesta_slide = _correr_cadena(dato)
+        elif tipo == "instant":
             # Acción de sistema al INSTANTE (cero LLM): bloquear, volumen, escritorio, etc.
             from Nucleo_Slide.Control_Directo import ejecutar_instantanea
             respuesta_slide = ejecutar_instantanea(dato)
