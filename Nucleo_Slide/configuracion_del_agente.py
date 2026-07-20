@@ -20,6 +20,9 @@ from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
 from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
 from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy
 from Funciones_Slide.Sistema.Sesion import restaurar_sesion
+from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
+from Funciones_Slide.Info.Web import abrir_web
+from Funciones_Slide.Sistema.Windows_Admin import matar_proceso, volumen_exacto, brillo_exacto
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -908,6 +911,72 @@ tools = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "Enviar_mensaje_Discord",
+            "description": "Envía un mensaje por Discord a una persona (DM) o canal. Úsala cuando Marco diga 'mándale a X por Discord...', 'escríbele a X en Discord diciendo...', 'dile a X en Discord que...'. TÚ separas el destino (a quién) y el mensaje.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "destino": {"type": "string", "description": "Nombre de la persona (DM) o del canal/servidor."},
+                    "mensaje": {"type": "string", "description": "El texto a enviar."}
+                },
+                "required": ["destino", "mensaje"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "abrir_web",
+            "description": "Abre una página web en el navegador: un sitio conocido por nombre (youtube, gmail, github, netflix, drive, canvas...) o una URL cualquiera. Úsala para 'abre youtube', 'abre youtube y busca X' (buscar=X), 'abre mi correo', 'abre <página>'. Distinta de Buscar_en_Google (búsqueda) y de Abrir_Videos_Youtube (reproduce directo).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sitio": {"type": "string", "description": "Nombre del sitio (ej. 'youtube') o URL (ej. 'canvas.com')."},
+                    "buscar": {"type": "string", "description": "Opcional: qué buscar dentro del sitio (útil en YouTube/Google)."}
+                },
+                "required": ["sitio"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "matar_proceso",
+            "description": "Cierra a la fuerza un programa/proceso por nombre. Úsala cuando Marco diga 'cierra Chrome a la fuerza', 'mata el proceso X', 'fuerza el cierre de Y' (p.ej. una app colgada).",
+            "parameters": {
+                "type": "object",
+                "properties": {"nombre": {"type": "string", "description": "Nombre del programa/proceso (ej. 'chrome', 'spotify')."}},
+                "required": ["nombre"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "volumen_exacto",
+            "description": "Pone el volumen del sistema en un porcentaje exacto (0-100). Úsala para 'pon el volumen en 30', 'volumen al 50'.",
+            "parameters": {
+                "type": "object",
+                "properties": {"nivel": {"type": "integer", "description": "Porcentaje de volumen (0-100)."}},
+                "required": ["nivel"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "brillo_exacto",
+            "description": "Pone el brillo de la pantalla en un porcentaje exacto (0-100). Úsala para 'pon el brillo en 70', 'brillo al 40'.",
+            "parameters": {
+                "type": "object",
+                "properties": {"nivel": {"type": "integer", "description": "Porcentaje de brillo (0-100)."}},
+                "required": ["nivel"]
+            }
+        }
     }
 ]
 
@@ -970,4 +1039,9 @@ tools_map = {
     "revisar_correo": revisar_correo,
     "agenda_hoy": agenda_hoy,
     "restaurar_sesion": restaurar_sesion,
+    "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
+    "abrir_web": abrir_web,
+    "matar_proceso": matar_proceso,
+    "volumen_exacto": volumen_exacto,
+    "brillo_exacto": brillo_exacto,
 }

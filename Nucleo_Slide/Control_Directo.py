@@ -153,6 +153,79 @@ def ejecutar_instantanea(accion):
     return "No reconocí esa acción, señor."
 
 
+# ── 1b. FUNCIONES DE WINDOWS (red / rendimiento / mantenimiento / info) ───────
+# Frases exactas -> id de función de Windows_Admin. Cero LLM, valen siempre.
+_ADMIN = {
+    "arreglar_internet": ("arregla el internet", "arregla mi internet", "repara el internet",
+                          "arregla la conexion", "se cayo el internet", "reinicia el internet"),
+    "limpiar_dns": ("limpia el dns", "vacia el dns", "flush dns"),
+    "mi_ip": ("cual es mi ip", "mi ip", "dame mi ip", "dime mi ip", "que ip tengo",
+              "cual es mi direccion ip"),
+    "clave_wifi": ("cual es la clave del wifi", "clave del wifi", "contrasena del wifi",
+                   "cual es la contrasena del wifi", "dame la clave del wifi", "clave del internet"),
+    "desconectar_wifi": ("desconecta el wifi", "apaga el wifi", "desactiva el wifi"),
+    "reconectar_wifi": ("reconecta el wifi", "conecta el wifi", "prende el wifi", "activa el wifi"),
+    "plan_alto": ("modo alto rendimiento", "maximo rendimiento", "modo rendimiento",
+                  "plan de alto rendimiento", "modo gaming de energia", "energia al maximo"),
+    "plan_equilibrado": ("modo equilibrado", "energia equilibrada", "plan equilibrado",
+                         "modo de energia normal"),
+    "despierto_on": ("mantente despierta", "no te duermas", "manten la pc despierta",
+                     "no dejes que se duerma", "modo cafeina", "no dejes que se apague la pantalla"),
+    "despierto_off": ("deja que se duerma", "desactiva la cafeina", "ya puedes dormir"),
+    "hibernar": ("hiberna", "hiberna la pc", "modo hibernacion", "hibernar"),
+    "limpiar_temporales": ("limpia los temporales", "libera espacio", "borra los temporales",
+                           "limpia la basura del sistema", "limpia el pc", "limpia archivos basura"),
+    "reiniciar_explorador": ("reinicia el explorador", "arregla la barra de tareas",
+                             "reinicia la barra de tareas", "se colgo la barra de tareas"),
+    "espacio_disco": ("cuanto espacio me queda", "cuanto disco me queda", "espacio en disco",
+                      "cuanto espacio tengo", "cuanto me queda de disco"),
+    "procesos_top": ("que esta usando la pc", "que consume mas", "que esta consumiendo",
+                     "que usa mas memoria", "por que esta lenta la pc", "que tiene lenta la pc"),
+    "modo_oscuro": ("modo oscuro", "pon el tema oscuro", "tema oscuro", "activa el modo oscuro"),
+    "modo_claro": ("modo claro", "pon el tema claro", "tema claro", "activa el modo claro"),
+    "mostrar_ocultos": ("muestra los archivos ocultos", "ver archivos ocultos", "muestra los ocultos"),
+    "ocultar_ocultos": ("oculta los archivos ocultos", "esconde los archivos ocultos"),
+    "cerrar_sesion": ("cierra sesion", "cierra mi sesion", "cerrar sesion"),
+    "specs": ("cuales son mis specs", "specs de la pc", "info del pc", "que specs tengo",
+              "caracteristicas del pc", "info de la pc"),
+    "bateria": ("como esta la bateria", "cuanta bateria tengo", "nivel de bateria", "la bateria"),
+    "encendido": ("cuanto llevo encendido", "cuanto lleva encendida la pc", "tiempo encendido",
+                  "hace cuanto prendi la pc", "cuanto lleva prendida"),
+}
+
+
+def clasificar_admin(p):
+    p = _p(p)
+    for accion, frases in _ADMIN.items():
+        if p in frases:
+            return accion
+    return None
+
+
+def ejecutar_admin(accion):
+    from Funciones_Slide.Sistema import Windows_Admin as W
+    m = {
+        "arreglar_internet": W.arreglar_internet, "limpiar_dns": W.limpiar_dns, "mi_ip": W.mi_ip,
+        "clave_wifi": W.clave_wifi, "desconectar_wifi": W.desconectar_wifi,
+        "reconectar_wifi": W.reconectar_wifi,
+        "plan_alto": lambda: W.plan_energia("alto"), "plan_equilibrado": lambda: W.plan_energia("equilibrado"),
+        "despierto_on": lambda: W.mantener_despierto(True), "despierto_off": lambda: W.mantener_despierto(False),
+        "hibernar": W.hibernar, "limpiar_temporales": W.limpiar_temporales,
+        "reiniciar_explorador": W.reiniciar_explorador, "espacio_disco": W.espacio_disco,
+        "procesos_top": W.procesos_top, "modo_oscuro": lambda: W.modo_oscuro(True),
+        "modo_claro": lambda: W.modo_oscuro(False), "mostrar_ocultos": lambda: W.mostrar_ocultos(True),
+        "ocultar_ocultos": lambda: W.mostrar_ocultos(False), "cerrar_sesion": W.cerrar_sesion,
+        "specs": W.specs_pc, "bateria": W.estado_bateria, "encendido": W.tiempo_encendido,
+    }
+    fn = m.get(accion)
+    if not fn:
+        return "No reconocí esa función, señor."
+    try:
+        return fn()
+    except Exception as e:
+        return f"No pude, señor: {e}"
+
+
 # ── 2. CARRIL RÁPIDO (traduce voz -> PowerShell, cerebro mínimo) ───────────────
 def control_directo(instruccion):
     """Traduce la orden de voz a UN comando de PowerShell con una llamada MINIMA (modelo ligero, sin

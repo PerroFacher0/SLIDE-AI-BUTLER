@@ -28,7 +28,8 @@ def _plano(texto):
 
 
 # Tipos de atajo que se pueden ENCADENAR (son "hacer algo y devolver texto", sin tocar la ventana).
-_ENCADENABLES = {"instant", "abrir", "musica", "musica_contextual", "control_directo", "estado"}
+_ENCADENABLES = {"instant", "abrir", "musica", "musica_contextual", "control_directo", "estado",
+                 "web", "web_youtube", "admin"}
 # Conectores que separan varias órdenes en una misma frase.
 _SEP_ORDENES = re.compile(r"\s*(?:,|;|\s+y luego\s+|\s+luego\s+|\s+despues\s+|\s+y despues\s+|"
                           r"\s+tambien\s+|\s+y tambien\s+|\s+y\s+)\s*", re.IGNORECASE)
@@ -117,6 +118,24 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
             p = p[len(pref):]
             break
 
+    # WEBS Y YOUTUBE (antes de la división en cadena, para no partir "youtube y busca X").
+    #   "abre youtube y busca X" / "busca en youtube X" / "pon X en youtube" -> resultados de YouTube.
+    m = re.search(r"(?:abre |pon |busca en |reproduce en )?youtube (?:y busca |y pon |con |busca |)(.+)",
+                  p)
+    if m and m.group(1).strip() and any(k in p for k in ("busca", "pon", "reproduce", " con ")):
+        return ("web_youtube", m.group(1).strip())
+    m = re.search(r"busca en youtube (.+)", p)
+    if m:
+        return ("web_youtube", m.group(1).strip())
+    #   "abre <sitio web conocido>" -> abre esa web (no una app).
+    if p.startswith(("abre ", "abrir ", "ve a ", "entra a ", "entra en ")):
+        objetivo = re.sub(r"^(abre |abrir |ve a |entra a |entra en )", "", p).strip(" .")
+        from Funciones_Slide.Info.Web import WEB_DIRECTOS
+        if objetivo in WEB_DIRECTOS or objetivo.replace("mi ", "") in WEB_DIRECTOS:
+            return ("web", objetivo.replace("mi ", ""))
+        if ("." in objetivo and " " not in objetivo):     # una URL dicha ("abre canvas.com")
+            return ("web", objetivo)
+
     # ÓRDENES EN CADENA: varias en una frase ("abre spotify, sube el volumen y minimiza todo").
     # Solo si TODAS las partes son atajos encadenables (si alguna es charla/tarea, va entera al cerebro,
     # que ya sabe encadenar herramientas). Recursivo pero sin bucle (los fragmentos ya no traen conectores).
@@ -135,10 +154,28 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
         return ("control_off", None)
 
     # ACCIONES INSTANTÁNEAS de sistema (cero LLM): valen SIEMPRE, con o sin modo control.
-    from Nucleo_Slide.Control_Directo import clasificar_instantanea
+    from Nucleo_Slide.Control_Directo import clasificar_instantanea, clasificar_admin
     aid = clasificar_instantanea(p)
     if aid:
         return ("instant", aid)
+
+    # FUNCIONES DE WINDOWS (red/rendimiento/mantenimiento/energía/info): frase exacta -> acción.
+    aad = clasificar_admin(p)
+    if aad:
+        return ("admin", aad)
+
+    # PARAMETRIZADAS (cero LLM): matar proceso por nombre, volumen/brillo exacto.
+    mm = re.search(r"^(?:mata|matar|fuerza el cierre de) (?:el proceso |la app |el programa )?(.+)$", p)
+    if not mm:
+        mm = re.search(r"^cierra (?:el |la |)(.+?) a la fuerza$", p)
+    if mm and mm.group(1).strip():
+        return ("proc_kill", mm.group(1).strip())
+    mv = re.search(r"(?:pon(?:me)? )?(?:el )?volumen (?:en|al|a) (?:el )?(\d{1,3})", p)
+    if mv:
+        return ("vol_set", mv.group(1))
+    mb = re.search(r"(?:pon(?:me)? )?(?:el )?brillo (?:en|al|a) (?:el )?(\d{1,3})", p)
+    if mb:
+        return ("brillo_set", mb.group(1))
 
     # En MODO CONTROL, todo lo demás va al carril rápido (voz -> PowerShell, cerebro mínimo).
     if modo_control and len(p) >= 3:
@@ -253,6 +290,15 @@ def _correr_uno(tipo, dato):
             return control_directo(dato)
         if tipo == "estado":
             return _informe_estado()
+        if tipo == "admin":
+            from Nucleo_Slide.Control_Directo import ejecutar_admin
+            return ejecutar_admin(dato)
+        if tipo == "web":
+            from Funciones_Slide.Info.Web import abrir_web
+            return abrir_web(dato)
+        if tipo == "web_youtube":
+            from Funciones_Slide.Info.Web import abrir_web
+            return abrir_web("youtube", dato)
     except Exception:
         return ""
     return ""
@@ -363,6 +409,25 @@ def Procesar_Peticion(texto, ventana):
             respuesta_slide = f"Mensaje enviado a {contacto}, señor."
         elif tipo == "musica":
             respuesta_slide = control_musica(dato)
+        elif tipo == "web":
+            from Funciones_Slide.Info.Web import abrir_web
+            respuesta_slide = abrir_web(dato)
+        elif tipo == "web_youtube":
+            from Funciones_Slide.Info.Web import abrir_web
+            respuesta_slide = abrir_web("youtube", dato)
+        elif tipo == "admin":
+            # Función de Windows (red/rendimiento/mantenimiento/info) al instante, cero LLM.
+            from Nucleo_Slide.Control_Directo import ejecutar_admin
+            respuesta_slide = ejecutar_admin(dato)
+        elif tipo == "proc_kill":
+            from Funciones_Slide.Sistema.Windows_Admin import matar_proceso
+            respuesta_slide = matar_proceso(dato)
+        elif tipo == "vol_set":
+            from Funciones_Slide.Sistema.Windows_Admin import volumen_exacto
+            respuesta_slide = volumen_exacto(dato)
+        elif tipo == "brillo_set":
+            from Funciones_Slide.Sistema.Windows_Admin import brillo_exacto
+            respuesta_slide = brillo_exacto(dato)
         elif tipo == "contestar":
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
