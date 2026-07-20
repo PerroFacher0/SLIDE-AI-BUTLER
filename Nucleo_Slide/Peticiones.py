@@ -29,6 +29,9 @@ def _plano(texto):
 # --- Modo manos libres (estado de sesión, compartido por los dos Main) -------
 _manos_libres = False
 _silencios_manos_libres = 0
+# MODO CONTROL: cuando está activo, CADA orden va al carril rápido (voz -> acción, cerebro mínimo)
+# en vez del cerebro completo -> control de toda la PC casi instantáneo.
+_modo_control = False
 ESPERA_MANOS_LIBRES = 20          # segundos que escucha en cada turno dentro del modo
 MAX_SILENCIOS_MANOS_LIBRES = 15   # 15 turnos x 20s = ~5 min de silencio -> sale solo (anti mic eterno)
 
@@ -85,10 +88,8 @@ def _informe_estado():
     return " ".join(p for p in partes if p)
 
 
-def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
-    """Enrutado PURO de los atajos sin LLM. Devuelve (tipo, dato) donde tipo es uno de:
-    'abrir', 'whatsapp', 'musica', 'contestar', 'estado', 'quedate', 'manos_on', 'manos_off',
-    'buenas_noches', 'descansa', 'codigo', 'llm'. Sin efectos secundarios (testeable)."""
+def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_control=False):
+    """Enrutado PURO de los atajos sin LLM. Devuelve (tipo, dato). Sin efectos secundarios (testeable)."""
     original = str(texto or "").strip().lower()
     p = _plano(original)
     # Tolera el nombre por delante ("aiden, abre spotify").
@@ -97,6 +98,24 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False):
             original = original[len(pref):]
             p = p[len(pref):]
             break
+
+    # Encender/apagar el MODO CONTROL (control de toda la PC casi instantáneo).
+    if any(k in p for k in ("modo control", "control por voz", "controla mi pc", "controla el pc",
+                            "toma el control")):
+        return ("control_on", None)
+    if any(k in p for k in ("sal del control", "salir del control", "deja el control",
+                            "termina el control", "modo normal")):
+        return ("control_off", None)
+
+    # ACCIONES INSTANTÁNEAS de sistema (cero LLM): valen SIEMPRE, con o sin modo control.
+    from Nucleo_Slide.Control_Directo import clasificar_instantanea
+    aid = clasificar_instantanea(p)
+    if aid:
+        return ("instant", aid)
+
+    # En MODO CONTROL, todo lo demás va al carril rápido (voz -> PowerShell, cerebro mínimo).
+    if modo_control and len(p) >= 3:
+        return ("control_directo", original)
 
     if p.startswith("abre "):
         app = original[5:].strip(" .")
@@ -235,7 +254,7 @@ def _cerrar_taller_silencioso():
 def Procesar_Peticion(texto, ventana):
     # El while permite el "barge-in": si AIDEN es interrumpido, volvemos a
     # escuchar al usuario de inmediato (sin repetir la palabra clave).
-    global _manos_libres, _silencios_manos_libres
+    global _manos_libres, _silencios_manos_libres, _modo_control
 
     # Imports perezosos: el módulo se puede importar/testear sin levantar CUDA ni micrófono.
     from Voz_Slide.Transcriptor import escuchador_de_usuario
@@ -254,9 +273,28 @@ def Procesar_Peticion(texto, ventana):
         ya_hablado = False
 
         tipo, dato = decidir_atajo(texto, llamada_activa=hay_llamada_activa(),
-                                   hay_error_codigo=estado_aiden["hay_error"])
+                                   hay_error_codigo=estado_aiden["hay_error"],
+                                   modo_control=_modo_control)
 
-        if tipo == "abrir":
+        if tipo == "instant":
+            # Acción de sistema al INSTANTE (cero LLM): bloquear, volumen, escritorio, etc.
+            from Nucleo_Slide.Control_Directo import ejecutar_instantanea
+            respuesta_slide = ejecutar_instantanea(dato)
+        elif tipo == "control_directo":
+            # MODO CONTROL: voz -> acción con cerebro mínimo (rápido, propósito general).
+            from Nucleo_Slide.Control_Directo import control_directo
+            respuesta_slide = control_directo(dato)
+        elif tipo == "control_on":
+            _modo_control = True
+            _manos_libres = True          # mic abierto: dispara órdenes seguidas sin despertarlo
+            _silencios_manos_libres = 0
+            respuesta_slide = ("Modo control activo, señor: manejo toda la PC al vuelo, dígame las "
+                               "órdenes seguidas y las ejecuto. 'Modo normal' para salir.")
+        elif tipo == "control_off":
+            _modo_control = False
+            _manos_libres = False
+            respuesta_slide = "Salgo del modo control, señor. Vuelvo a ser todo oídos."
+        elif tipo == "abrir":
             # "Abriendo X, señor." — honesto: la función no puede verificar que abrió bien.
             respuesta_slide = Abrir_Apps(dato)
         elif tipo == "whatsapp":
