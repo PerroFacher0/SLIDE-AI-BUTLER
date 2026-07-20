@@ -285,3 +285,166 @@ def volumen_exacto(nivel):
            f"1..{pasos}|%{{$w.SendKeys([char]175)}}")
     _run(["powershell", "-NoProfile", "-Command", cmd])
     return f"Volumen al {n}%, señor."
+
+
+# ── VENTANAS / ESCRITORIOS VIRTUALES (teclas del sistema, fiables sin foco) ────
+_KEYUP = 0x0002
+_VK = {"win": 0x5B, "ctrl": 0x11, "alt": 0x12, "shift": 0x10,
+       "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28, "d": 0x44, "f4": 0x73, "tab": 0x09}
+
+
+def _combo(*teclas):
+    # Presiona una combinación (mantiene modificadores, pulsa la última, suelta al revés).
+    vks = [_VK[t] for t in teclas]
+    try:
+        for v in vks:
+            ctypes.windll.user32.keybd_event(v, 0, 0, 0)
+        time.sleep(0.04)
+        for v in reversed(vks):
+            ctypes.windll.user32.keybd_event(v, 0, _KEYUP, 0)
+        return True
+    except Exception:
+        return False
+
+
+def escritorio_nav(accion="siguiente"):
+    a = str(accion).lower()
+    if "nuev" in a:
+        _combo("win", "ctrl", "d"); return "Nuevo escritorio, señor."
+    if "cierr" in a or "cerr" in a:
+        _combo("win", "ctrl", "f4"); return "Escritorio cerrado, señor."
+    if "anter" in a or "izq" in a:
+        _combo("win", "ctrl", "left"); return "Escritorio anterior, señor."
+    _combo("win", "ctrl", "right"); return "Siguiente escritorio, señor."
+
+
+def acomodar_ventana(lado="izquierda"):
+    l = str(lado).lower()
+    if "max" in l or "arr" in l:
+        _combo("win", "up"); return "Ventana maximizada, señor."
+    if "der" in l:
+        _combo("win", "right"); return "Ventana a la derecha, señor."
+    _combo("win", "left"); return "Ventana a la izquierda, señor."
+
+
+def captura_region():
+    # Abre el recorte de región de Windows (Win+Shift+S) para seleccionar un área.
+    _run(["explorer.exe", "ms-screenclip:"])
+    return "Seleccione el área a recortar, señor."
+
+
+# ── RED / DIAGNÓSTICO ─────────────────────────────────────────────────────────
+def probar_internet():
+    salida = _cmd(["ping", "-n", "4", "8.8.8.8"], timeout=15)
+    import re
+    perdida = re.search(r"\((\d+)%", salida)
+    prom = re.findall(r"(\d+)ms", salida)
+    if not prom and "error" not in salida:
+        # a veces el promedio viene como "Media = Xms" al final
+        prom = re.findall(r"=\s*(\d+)\s*ms", salida)
+    if perdida and perdida.group(1) == "100":
+        return "Sin respuesta de internet, señor: 100% de paquetes perdidos. Revise la conexión."
+    if prom:
+        media = round(sum(int(x) for x in prom) / len(prom))
+        p = f", {perdida.group(1)}% de pérdida" if perdida and perdida.group(1) != "0" else ""
+        calidad = "excelente" if media < 40 else "aceptable" if media < 120 else "lenta"
+        return f"Internet {calidad}, señor: {media} ms de latencia{p}."
+    return "No pude medir el internet, señor."
+
+
+def ip_publica():
+    try:
+        import requests
+        ip = requests.get("https://api.ipify.org", timeout=8).text.strip()
+        return f"Su IP pública es {ip}, señor."
+    except Exception:
+        return "No pude consultar la IP pública, señor (¿sin internet?)."
+
+
+def version_windows():
+    salida, _ = _ps("$o=Get-CimInstance Win32_OperatingSystem; '{0}|{1}' -f $o.Caption.Trim(),"
+                    "$o.Version")
+    try:
+        nombre, ver = salida.split("|")
+        return f"{nombre} (versión {ver}), señor."
+    except Exception:
+        return "No pude leer la versión de Windows, señor."
+
+
+def temperatura_gpu():
+    salida = _cmd(["nvidia-smi", "--query-gpu=temperature.gpu,utilization.gpu",
+                   "--format=csv,noheader,nounits"], timeout=10)
+    try:
+        temp, uso = [x.strip() for x in salida.splitlines()[0].split(",")]
+        return f"La GPU está a {temp}°C, al {uso}% de uso, señor."
+    except Exception:
+        return "No pude leer la temperatura de la GPU, señor."
+
+
+def archivos_grandes():
+    cmd = ("Get-ChildItem $HOME\\Downloads,$HOME\\Desktop,$HOME\\Documents,$HOME\\Videos -Recurse "
+           "-File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object "
+           "-First 6 | ForEach-Object { '{0} {1}MB' -f $_.Name,[math]::Round($_.Length/1MB) }")
+    salida, _ = _ps(cmd, timeout=40)
+    if not salida or "error" in salida:
+        return "No encontré archivos grandes, señor."
+    return "Los archivos más pesados, señor: " + "; ".join(salida.splitlines()[:6]) + "."
+
+
+# ── LAUNCHERS DE UTILIDADES ───────────────────────────────────────────────────
+def abrir_utilidad(cual="panel"):
+    c = str(cual).lower()
+    if "dispositiv" in c:
+        _run(["devmgmt.msc"]); return "Administrador de dispositivos abierto, señor."
+    if "servici" in c:
+        _run(["services.msc"]); return "Servicios abiertos, señor."
+    if "sonido" in c or "audio" in c:
+        _run(["explorer.exe", "ms-settings:sound"]); return "Configuración de sonido abierta, señor."
+    if "red" in c:
+        _run(["explorer.exe", "ms-settings:network"]); return "Configuración de red abierta, señor."
+    if "disco" in c or "almacen" in c:
+        _run(["explorer.exe", "ms-settings:storagesense"]); return "Almacenamiento abierto, señor."
+    _run(["control.exe"]); return "Panel de control abierto, señor."
+
+
+# ── PORTAPAPELES INTELIGENTE ──────────────────────────────────────────────────
+def _clip():
+    try:
+        import pyperclip
+        return (pyperclip.paste() or "").strip()
+    except Exception:
+        return ""
+
+
+def leer_copiado():
+    t = _clip()
+    if not t:
+        return "No hay nada copiado, señor."
+    return t[:600]
+
+
+def _llm_sobre_clip(instruccion, max_tokens=400):
+    t = _clip()
+    if not t:
+        return "No hay nada copiado, señor."
+    try:
+        from Nucleo_Slide.Cerebro import client, MODELO_LIGERO
+        r = client.chat.completions.create(
+            model=MODELO_LIGERO,
+            messages=[{"role": "user", "content": instruccion + "\n\nTEXTO:\n" + t[:4000]}],
+            temperature=0.2, max_tokens=max_tokens,
+        )
+        return (r.choices[0].message.content or "").strip() or "No obtuve resultado, señor."
+    except Exception as e:
+        return f"No pude procesarlo, señor: {e}"
+
+
+def traducir_copiado():
+    return _llm_sobre_clip(
+        "Traduce este texto al español (si ya está en español, tradúcelo al inglés). Responde SOLO "
+        "la traducción, sin comentarios.")
+
+
+def resumir_copiado():
+    return _llm_sobre_clip(
+        "Resume este texto en 2-3 frases claras, en español, para leérselo a Marco. Solo el resumen.")

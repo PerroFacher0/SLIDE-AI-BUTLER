@@ -191,6 +191,37 @@ _ADMIN = {
     "bateria": ("como esta la bateria", "cuanta bateria tengo", "nivel de bateria", "la bateria"),
     "encendido": ("cuanto llevo encendido", "cuanto lleva encendida la pc", "tiempo encendido",
                   "hace cuanto prendi la pc", "cuanto lleva prendida"),
+    # Escritorios virtuales y ventanas
+    "escritorio_sig": ("siguiente escritorio", "escritorio siguiente", "cambia de escritorio",
+                       "ve al siguiente escritorio"),
+    "escritorio_ant": ("escritorio anterior", "anterior escritorio", "ve al escritorio anterior"),
+    "escritorio_nuevo": ("nuevo escritorio", "crea un escritorio", "abre otro escritorio"),
+    "escritorio_cerrar": ("cierra el escritorio", "cierra este escritorio", "elimina el escritorio"),
+    "ventana_izq": ("acomoda la ventana a la izquierda", "ventana a la izquierda", "pega la ventana a la izquierda"),
+    "ventana_der": ("acomoda la ventana a la derecha", "ventana a la derecha", "pega la ventana a la derecha"),
+    "ventana_max": ("maximiza la ventana", "maximiza", "agranda la ventana"),
+    "captura_region": ("captura una region", "recorta la pantalla", "recorta", "captura un area",
+                       "captura una parte"),
+    # Red / diagnóstico
+    "probar_internet": ("prueba mi internet", "como esta mi internet", "que tan bueno esta el internet",
+                        "test de internet", "mide mi internet", "como anda el internet"),
+    "ip_publica": ("cual es mi ip publica", "mi ip publica", "dame mi ip publica"),
+    "version_windows": ("que version de windows tengo", "version de windows", "que windows tengo"),
+    "temp_gpu": ("temperatura de la gpu", "que temperatura tiene la gpu", "como esta la gpu",
+                 "temperatura de la tarjeta grafica"),
+    "archivos_grandes": ("cuales son mis archivos mas grandes", "archivos mas grandes", "que ocupa mas espacio",
+                         "encuentra los archivos pesados", "que archivos pesan mas"),
+    # Launchers de utilidades
+    "util_panel": ("abre el panel de control", "panel de control"),
+    "util_dispositivos": ("abre el administrador de dispositivos", "administrador de dispositivos"),
+    "util_servicios": ("abre los servicios", "abre servicios"),
+    "util_sonido": ("abre la configuracion de sonido", "configuracion de sonido", "ajustes de sonido"),
+    "util_red": ("abre la configuracion de red", "ajustes de red"),
+    "util_almacen": ("abre el almacenamiento", "configuracion de almacenamiento"),
+    # Portapapeles inteligente
+    "leer_copiado": ("lee lo que copie", "leeme lo que copie", "que copie", "lee el portapapeles"),
+    "traducir_copiado": ("traduce lo que copie", "traduceme lo que copie", "traduce el portapapeles"),
+    "resumir_copiado": ("resume lo que copie", "resumeme lo que copie", "resume el portapapeles"),
 }
 
 
@@ -216,6 +247,24 @@ def ejecutar_admin(accion):
         "modo_claro": lambda: W.modo_oscuro(False), "mostrar_ocultos": lambda: W.mostrar_ocultos(True),
         "ocultar_ocultos": lambda: W.mostrar_ocultos(False), "cerrar_sesion": W.cerrar_sesion,
         "specs": W.specs_pc, "bateria": W.estado_bateria, "encendido": W.tiempo_encendido,
+        "escritorio_sig": lambda: W.escritorio_nav("siguiente"),
+        "escritorio_ant": lambda: W.escritorio_nav("anterior"),
+        "escritorio_nuevo": lambda: W.escritorio_nav("nuevo"),
+        "escritorio_cerrar": lambda: W.escritorio_nav("cerrar"),
+        "ventana_izq": lambda: W.acomodar_ventana("izquierda"),
+        "ventana_der": lambda: W.acomodar_ventana("derecha"),
+        "ventana_max": lambda: W.acomodar_ventana("maximizar"),
+        "captura_region": W.captura_region, "probar_internet": W.probar_internet,
+        "ip_publica": W.ip_publica, "version_windows": W.version_windows,
+        "temp_gpu": W.temperatura_gpu, "archivos_grandes": W.archivos_grandes,
+        "util_panel": lambda: W.abrir_utilidad("panel"),
+        "util_dispositivos": lambda: W.abrir_utilidad("dispositivos"),
+        "util_servicios": lambda: W.abrir_utilidad("servicios"),
+        "util_sonido": lambda: W.abrir_utilidad("sonido"),
+        "util_red": lambda: W.abrir_utilidad("red"),
+        "util_almacen": lambda: W.abrir_utilidad("almacenamiento"),
+        "leer_copiado": W.leer_copiado, "traducir_copiado": W.traducir_copiado,
+        "resumir_copiado": W.resumir_copiado,
     }
     fn = m.get(accion)
     if not fn:
