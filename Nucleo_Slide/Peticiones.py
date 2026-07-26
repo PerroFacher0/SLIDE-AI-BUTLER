@@ -29,7 +29,9 @@ def _plano(texto):
 
 # Tipos de atajo que se pueden ENCADENAR (son "hacer algo y devolver texto", sin tocar la ventana).
 _ENCADENABLES = {"instant", "abrir", "musica", "musica_contextual", "control_directo", "estado",
-                 "web", "web_youtube", "admin"}
+                 "web", "web_youtube", "admin", "clic_pantalla", "arrastrar_pantalla",
+                 "cerrar_pestana", "seleccionar_todo", "scroll_pantalla", "ordenar_ventanas",
+                 "enfocar_app", "ventana_ctrl", "atajo_teclado", "escribir_texto"}
 # Conectores que separan varias órdenes en una misma frase.
 _SEP_ORDENES = re.compile(r"\s*(?:,|;|\s+y luego\s+|\s+luego\s+|\s+despues\s+|\s+y despues\s+|"
                           r"\s+tambien\s+|\s+y tambien\s+|\s+y\s+)\s*", re.IGNORECASE)
@@ -177,6 +179,66 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
     if mb:
         return ("brillo_set", mb.group(1))
 
+    # ── CONTROL DE PANTALLA por voz, CASI INSTANTÁNEO (cero LLM en el enrutado; la ejecución
+    # busca el elemento por nombre primero —rápido— y solo si no lo encuentra recurre a visión).
+    # ATAJO DE TECLADO: solo si de verdad trae un modificador o una tecla nombrada (si no, puede ser
+    # "pulsa/presiona el botón X", que es un CLIC, no una combinación).
+    matajo = re.search(r"^(?:presiona|pulsa|atajo|combinacion)\s+(.+)$", p)
+    if matajo:
+        combo_txt = matajo.group(1).strip()
+        palabras_combo = combo_txt.replace("+", " ").split()
+        _MOD_KEYS = ("ctrl", "control", "alt", "shift", "mayus", "win", "windows")
+        _SINGLE_KEYS = ("tab", "escape", "esc", "enter", "intro", "supr", "delete", "espacio",
+                        "backspace", "borrar")
+        if any(k in palabras_combo for k in _MOD_KEYS) or (
+                len(palabras_combo) == 1 and palabras_combo[0] in _SINGLE_KEYS):
+            return ("atajo_teclado", combo_txt)
+        # si no, sigue de largo: probablemente es "pulsa el botón X" (clic, más abajo)
+
+    mdc = re.search(r"^(?:haz |dame |dale )?doble clic (?:en |sobre |a )?(.+)$", p)
+    if mdc and mdc.group(1).strip():
+        return ("clic_pantalla", (mdc.group(1).strip(), "doble"))
+    mdr = re.search(r"^(?:haz |dame |dale )?clic (?:derecho|secundario) (?:en |sobre |a )?(.+)$", p)
+    if mdr and mdr.group(1).strip():
+        return ("clic_pantalla", (mdr.group(1).strip(), "derecho"))
+    mc = re.search(r"^(?:haz |dame |dale )?clic (?:en |sobre |a )?(.+)$", p)
+    if mc and mc.group(1).strip():
+        return ("clic_pantalla", (mc.group(1).strip(), "clic"))
+    mpb = re.search(r"^(?:pulsa|presiona)\s+(?:el boton |el boton de |la opcion |la opcion de |)(.+)$", p)
+    if mpb and mpb.group(1).strip():
+        return ("clic_pantalla", (mpb.group(1).strip(), "clic"))
+
+    mar = re.search(r"^arrastra\s+(.+?\s+(?:hasta|hacia|a)\s+.+)$", p)
+    if mar:
+        return ("arrastrar_pantalla", mar.group(1).strip())
+
+    if p in ("cierra la pestana", "cierra esta pestana", "cierra la pestana actual"):
+        return ("cerrar_pestana", None)
+    if p in ("selecciona todo", "seleccionar todo", "selecciona esto"):
+        return ("seleccionar_todo", None)
+    if p in ("scroll arriba", "desplaza arriba", "sube la pagina", "sube la pantalla"):
+        return ("scroll_pantalla", "arriba")
+    if p in ("scroll abajo", "desplaza abajo", "baja la pagina", "baja la pantalla"):
+        return ("scroll_pantalla", "abajo")
+    if p in ("ordena las ventanas", "acomoda las ventanas", "pon las ventanas en mosaico",
+             "organiza las ventanas", "mosaico de ventanas"):
+        return ("ordenar_ventanas", None)
+
+    menf = re.search(r"^(?:enfoca|trae|pon)\s+(?:la ventana de |a )?(.+?)\s+al frente$", p)
+    if not menf:
+        menf = re.search(r"^enfoca (?:la ventana de |)(.+)$", p)
+    if menf and menf.group(1).strip():
+        return ("enfocar_app", menf.group(1).strip())
+
+    if p in ("minimiza esta ventana", "minimiza la ventana", "minimiza la ventana actual"):
+        return ("ventana_ctrl", "minimizar")
+    if p in ("maximiza esta ventana", "maximiza la ventana", "maximiza la ventana actual"):
+        return ("ventana_ctrl", "maximizar")
+    if p in ("cierra esta ventana", "cierra la ventana actual"):
+        return ("ventana_ctrl", "cerrar")
+    if p in ("cambia de ventana", "siguiente ventana", "cambia a la siguiente ventana"):
+        return ("ventana_ctrl", "cambiar")
+
     # En MODO CONTROL, todo lo demás va al carril rápido (voz -> PowerShell, cerebro mínimo).
     if modo_control and len(p) >= 3:
         return ("control_directo", original)
@@ -212,6 +274,12 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
                       mr.group(2).strip(" ,.:")).strip()
         if len(tema) >= 3:
             return ("redactar", (tipo, tema))
+
+    # ESCRIBIR/DICTAR texto donde esté el cursor (cero LLM). Va DESPUÉS del redactor a propósito:
+    # "escribe un ensayo sobre X" ya lo capturó el bloque de arriba; esto es solo texto suelto.
+    mesc = re.search(r"^(?:escribe|dicta|teclea)(?:\s*:\s*|\s+)(.+)$", p)
+    if mesc and mesc.group(1).strip():
+        return ("escribir_texto", mesc.group(1).strip())
 
     # SOLUCIONADOR VISUAL: "resuelve esto" / "ayúdame con este problema" -> lo resuelve con el experto.
     if any(k in p for k in ("resuelve lo que ves", "resuelve lo que tengo en la camara",
@@ -321,6 +389,38 @@ def _correr_uno(tipo, dato):
         if tipo == "web_youtube":
             from Funciones_Slide.Info.Web import abrir_web
             return abrir_web("youtube", dato)
+        if tipo == "clic_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            objetivo, tipo_clic = dato
+            accion = {"doble": "doble_clic", "derecho": "clic_derecho"}.get(tipo_clic, "clic")
+            return controlar_pantalla(accion, objetivo)
+        if tipo == "arrastrar_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("arrastrar", dato)
+        if tipo == "cerrar_pestana":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("cerrar_pestana")
+        if tipo == "seleccionar_todo":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("seleccionar")
+        if tipo == "scroll_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("scroll", dato)
+        if tipo == "ordenar_ventanas":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("ordenar")
+        if tipo == "enfocar_app":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("enfocar", dato)
+        if tipo == "ventana_ctrl":
+            from Funciones_Slide.Sistema.Control_PC import control_ventana
+            return control_ventana(dato)
+        if tipo == "atajo_teclado":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            return controlar_pantalla("atajo", dato)
+        if tipo == "escribir_texto":
+            from Funciones_Slide.Sistema.Control_PC import dictar
+            return dictar(dato)
     except Exception:
         return ""
     return ""
@@ -450,6 +550,38 @@ def Procesar_Peticion(texto, ventana):
         elif tipo == "brillo_set":
             from Funciones_Slide.Sistema.Windows_Admin import brillo_exacto
             respuesta_slide = brillo_exacto(dato)
+        elif tipo == "clic_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            objetivo, tipo_clic = dato
+            accion = {"doble": "doble_clic", "derecho": "clic_derecho"}.get(tipo_clic, "clic")
+            respuesta_slide = controlar_pantalla(accion, objetivo)
+        elif tipo == "arrastrar_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("arrastrar", dato)
+        elif tipo == "cerrar_pestana":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("cerrar_pestana")
+        elif tipo == "seleccionar_todo":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("seleccionar")
+        elif tipo == "scroll_pantalla":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("scroll", dato)
+        elif tipo == "ordenar_ventanas":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("ordenar")
+        elif tipo == "enfocar_app":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("enfocar", dato)
+        elif tipo == "ventana_ctrl":
+            from Funciones_Slide.Sistema.Control_PC import control_ventana
+            respuesta_slide = control_ventana(dato)
+        elif tipo == "atajo_teclado":
+            from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+            respuesta_slide = controlar_pantalla("atajo", dato)
+        elif tipo == "escribir_texto":
+            from Funciones_Slide.Sistema.Control_PC import dictar
+            respuesta_slide = dictar(dato)
         elif tipo == "contestar":
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":

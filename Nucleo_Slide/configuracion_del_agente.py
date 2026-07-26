@@ -731,12 +731,12 @@ tools = [
         "type": "function",
         "function": {
             "name": "controlar_pantalla",
-            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. USA ESTA para: hacer clic en un boton/elemento por su nombre, ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar_pantalla). accion posibles: clic, doble_clic, clic_derecho, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
+            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, ARRASTRAR una cosa hasta otra, ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar_pantalla). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
-                    "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: el texto visible del boton/elemento. Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
+                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | arrastrar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
+                    "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: la descripcion de lo que se ve (nombre del boton, o una descripcion visual si no tiene nombre). Para arrastrar: 'X hasta Y'. Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
                 },
                 "required": ["accion"]
             }
