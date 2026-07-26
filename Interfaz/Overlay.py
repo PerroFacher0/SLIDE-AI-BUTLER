@@ -16,7 +16,9 @@ from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QStyleOption, QStyle, QGraphicsDropShadowEffect,
 )
 from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QGuiApplication, QPainter, QBrush, QColor, QRadialGradient
+from PySide6.QtGui import (
+    QGuiApplication, QPainter, QPen, QBrush, QColor, QRadialGradient, QLinearGradient,
+)
 
 # ── Parámetros ajustables ─────────────────────────────────────────────────────
 ANCHO, ALTO = 358, 236
@@ -87,8 +89,8 @@ def _esc(t):
     return str(t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _construir_html(rgb):
-    r, g, b, etiqueta = rgb
+def _construir_html(rgb, etiqueta):
+    r, g, b = rgb
     acc = f"rgb({r},{g},{b})"
     est = _estado()
 
@@ -148,7 +150,11 @@ class OverlayJarvis(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WA_StyledBackground, True)   # para que el fondo/borde del QSS se pinte bien
 
-        self._rgb = _TEMAS["normal"]
+        # El color NUNCA salta de golpe: se acerca suave al objetivo cada tick de animación
+        # (mismo idioma que el motor de la esfera: actual += (objetivo-actual)*factor). Así, si
+        # Marco entra a una reunión, el acento se atenúa hacia el ámbar en vez de dar un salto brusco.
+        self._rgb_obj = _TEMAS["normal"]              # objetivo real (r,g,b,etiqueta)
+        self._rgb_actual = list(_TEMAS["normal"][:3])  # r,g,b EN CAMINO hacia el objetivo
         self._fase = 0.0
 
         self._label = QLabel("")
@@ -194,14 +200,19 @@ class OverlayJarvis(QWidget):
 
     def _refrescar(self):
         try:
-            self._rgb = _tema_por_estado(_estado())
-            self._label.setText(_construir_html(self._rgb))
+            self._rgb_obj = _tema_por_estado(_estado())
+            self._label.setText(_construir_html(self._rgb_entero(), self._rgb_obj[3]))
         except Exception:
             pass
 
+    def _rgb_entero(self):
+        return tuple(round(c) for c in self._rgb_actual)
+
     def _tick_anim(self):
         self._fase += 1.0
-        self.update()   # solo repinta el latido; el texto no cambia aquí
+        for i in range(3):
+            self._rgb_actual[i] += (self._rgb_obj[i] - self._rgb_actual[i]) * 0.08
+        self.update()   # solo repinta el filo/latido; el texto no cambia aquí
 
     def paintEvent(self, event):
         opt = QStyleOption()
@@ -209,12 +220,26 @@ class OverlayJarvis(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         self.style().drawPrimitive(QStyle.PE_Widget, opt, p, self)
+        self._dibujar_filo(p)
         self._dibujar_latido(p)
         p.end()
 
+    def _dibujar_filo(self, p: QPainter):
+        # Filo de "cristal": un hilo de luz muy tenue justo bajo el borde superior — profundidad
+        # sin ruido (nada que gire ni barra, solo una insinuación de que el panel tiene volumen).
+        w = self.width()
+        grad = QLinearGradient(0, 0, w, 0)
+        grad.setColorAt(0.0, QColor(255, 255, 255, 0))
+        grad.setColorAt(0.5, QColor(255, 255, 255, 26))
+        grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        pen = QPen(QBrush(grad), 1.1)
+        p.setPen(pen)
+        p.drawLine(QPointF(14, 1.3), QPointF(w - 14, 1.3))
+
     def _dibujar_latido(self, p: QPainter):
-        # El ÚNICO elemento animado: un latido suave (respira), nada de arcos ni barridos. Menos es más.
-        r, g, b, _ = self._rgb
+        # El elemento animado central: un latido suave (respira) cuyo COLOR se desliza hacia el
+        # estado real de Marco en vez de saltar de golpe. Nada de arcos ni barridos: menos es más.
+        r, g, b = self._rgb_entero()
         cx, cy = 24, 25
         pulso = 0.5 + 0.5 * math.sin(self._fase * 0.05)
 
