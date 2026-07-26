@@ -81,6 +81,15 @@ def olvidar(dato):
     return f"Listo, señor. Olvidé {eliminados} recuerdo(s) relacionado(s) con eso."
 
 
+def memoria(accion="recordar", dato="", categoria="general"):
+    """HERRAMIENTA unificada de memoria permanente. accion 'recordar' (por defecto) guarda un dato
+    sobre Marco; accion 'olvidar' borra los que coincidan. Reemplaza recordar + olvidar sin perder nada."""
+    a = str(accion or "").strip().lower()
+    if a in ("olvidar", "borrar", "eliminar", "quitar"):
+        return olvidar(dato)
+    return recordar(dato, categoria)
+
+
 def obtener_memoria_texto():
     # Devuelve los recuerdos listos para inyectar en el system prompt,
     # agrupados por categoria para que AIDEN los use mejor.

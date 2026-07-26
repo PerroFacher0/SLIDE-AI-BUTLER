@@ -24,9 +24,50 @@ BASE_PROYECTOS = os.path.join(os.path.expanduser("~"), "Desktop", "Proyectos_AID
 TIMEOUT_CLAUDE = 1800     # 30 min máx para una tarea de Claude Code
 TIMEOUT_EJECUCION = 60    # 60s máx al ejecutar el código generado
 
+# Raíz del propio repo de AIDEN (para dictarle tareas a Claude Code SOBRE su propio código).
+_REPO_AIDEN = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 _CLAUDE = shutil.which("claude") or os.path.join(
     os.path.expanduser("~"), ".local", "bin", "claude.exe"
 )
+
+
+def pedir_a_claude_code(instruccion):
+    """HERRAMIENTA (dictado por voz -> Claude Code): Marco dicta una tarea de programación y AIDEN se
+    la encarga a Claude Code EN EL PROPIO REPO de AIDEN, en segundo plano. Va avisando cada tanto que
+    sigue trabajando (latido) y al terminar reporta por voz un resumen de lo que Claude hizo. OJO:
+    puede MODIFICAR el código del proyecto; conviene revisar 'git diff' después."""
+    instruccion = str(instruccion or "").strip()
+    if not instruccion:
+        return "¿Qué le encargo a Claude Code, señor?"
+    if not _CLAUDE or not os.path.exists(_CLAUDE):
+        return "No encuentro Claude Code en el sistema, señor; no puedo dictarle la tarea."
+
+    def _trabajo():
+        from Nucleo_Slide.Latido_Trabajo import latido
+        lat = latido(hablado_del_asistente, cada=60).iniciar()   # avisa cada minuto que sigue en ello
+        try:
+            r = subprocess.run(
+                [_CLAUDE, "-p", instruccion, "--permission-mode", "bypassPermissions"],
+                cwd=_REPO_AIDEN, capture_output=True, text=True,
+                timeout=TIMEOUT_CLAUDE, encoding="utf-8", errors="replace",
+            )
+            salida = (r.stdout or "").strip()
+            resumen = salida[-600:] if salida else "Terminó, aunque no obtuve un resumen claro."
+            lat.detener()
+            hablado_del_asistente(
+                f"Señor, Claude Code terminó su encargo. {resumen} Revise 'git diff' por si acaso."
+            )
+        except subprocess.TimeoutExpired:
+            lat.detener()
+            hablado_del_asistente("Señor, el encargo a Claude Code tardó demasiado y lo detuve.")
+        except Exception as e:
+            lat.detener()
+            hablado_del_asistente(f"Señor, hubo un problema con el encargo a Claude Code: {e}")
+
+    threading.Thread(target=_trabajo, daemon=True).start()
+    return ("Se lo dicto a Claude Code, señor; trabaja en el proyecto y le voy avisando. "
+            "Le reporto en cuanto termine.")
 
 
 def _slug(texto):
@@ -136,3 +177,13 @@ def ejecutar_proyecto(nombre="", archivo=""):
         return "El programa tardó demasiado (¿bucle o espera entrada?); lo detuve, señor."
     except Exception as e:
         return f"No pude ejecutar el proyecto, señor: {e}"
+
+
+def proyecto(accion="crear", instruccion="", nombre="", archivo=""):
+    """HERRAMIENTA unificada de proyectos. accion 'crear' (por defecto) construye un proyecto con
+    Claude Code a partir de 'instruccion'; accion 'ejecutar' corre el código de un proyecto ya creado.
+    Reemplaza crear_proyecto + ejecutar_proyecto sin perder nada."""
+    a = str(accion or "").strip().lower()
+    if a in ("ejecutar", "correr", "corre", "run", "abrir"):
+        return ejecutar_proyecto(nombre, archivo)
+    return crear_proyecto(instruccion, nombre)

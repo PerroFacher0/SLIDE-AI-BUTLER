@@ -225,7 +225,7 @@ Abajo te llega LO QUE HAY EN SU PC AHORA MISMO (ventana activa, apps abiertas, p
 energía). Es TU vista directa, como si estuvieras en la habitación: cuando Marco diga "esto",
 "eso", "ahí", "lo que estoy viendo", "cierra eso", "qué opinas de esto", se refiere a lo que
 percibes — resuélvelo TÚ sin preguntar a qué se refiere. Si necesitas leer el CONTENIDO en
-detalle (un texto, un error, un correo), usa analizar_pantalla. Menciona lo que ves solo cuando
+detalle (un texto, un error, un correo), usa analizar. Menciona lo que ves solo cuando
 sume (eres perceptivo, no un espía recitando ventanas).
 
 MODO CONVERSACIÓN
@@ -284,7 +284,7 @@ Activado por verbos: "programa", "aprende a", "créate una función", "escríbet
 Usa la herramienta Auto_Modificacion: TÚ NO escribes el código. Solo le pasas el nombre en snake_case
 (nombre_habilidad) y QUÉ debe hacer (instruccion, en lenguaje natural). Claude Code escribe la función
 y AIDEN la recarga; es en segundo plano, así que confirma breve que ya la estás programando.
-Si Marco pide un PROYECTO o app SEPARADO (no una habilidad del propio AIDEN), usa crear_proyecto.
+Si Marco pide un PROYECTO o app SEPARADO (no una habilidad del propio AIDEN), usa proyecto (accion crear).
 
 REGLA DE ORO
 Sé elocuente DESPUÉS de ejecutar correctamente las órdenes. Acción sobre explicación. Lealtad sobre todo.
@@ -432,8 +432,8 @@ def _confirmacion():
 # nunca te deja hablando solo. Solo con las lentas: las instantáneas (abrir, volumen) no lo
 # necesitan y una frase extra ahí sería estorbo.
 _TOOLS_LENTAS = {
-    "buscar_en_internet", "investigar", "consultar_experto", "analizar_vision",
-    "analizar_pantalla", "resumir", "crear_proyecto", "ejecutar_proyecto",
+    "buscar_en_internet", "investigar", "consultar_experto", "analizar",
+    "resumir", "proyecto", "redactar_documento", "resolver_visual",
     "ejecutar_mision", "noticias_del_dia", "recordar_a_fondo", "Auto_Modificacion",
 }
 _MURMULLOS = (
@@ -445,8 +445,8 @@ _MURMULLOS = (
 # cuando el modelo pide varias de estas en una tanda, se corren EN PARALELO (clima + noticias +
 # acciones llegan a la vez, no en fila india). Las de UI/acción siguen en orden estricto.
 _TOOLS_PARALELAS = {
-    "clima", "buscar_en_internet", "consultar_accion", "mis_acciones", "noticias_del_dia",
-    "calculadora", "convertir_moneda", "estado_sistema", "mis_gastos", "leer_notas",
+    "clima", "buscar_en_internet", "acciones", "noticias_del_dia",
+    "calculadora", "convertir_moneda", "estado_sistema", "mis_gastos", "notas",
     "recordar_conversacion", "recordar_a_fondo", "resumen_actividad", "leer_portapapeles",
     "buscar_archivo", "ver_apps_abiertas",
 }
@@ -671,17 +671,25 @@ def proceso_de_ia(texto_de_whisper):
                 decir(random.choice(_MURMULLOS))
                 murmuro = True
             nombres = [tc['function']['name'] for tc in tool_calls_list]
-            if len(tool_calls_list) > 1 and all(n in _TOOLS_PARALELAS for n in nombres):
-                # Varias consultas de SOLO LECTURA -> en PARALELO (mucho más rápido).
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=min(4, len(tool_calls_list))) as _ex:
-                    resultados = list(_ex.map(
-                        lambda tc: _ejecutar_tool_call(tc['function']['name'],
-                                                       tc['function']['arguments']),
-                        tool_calls_list))
-            else:
-                resultados = [_ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
-                              for tc in tool_calls_list]
+            # LATIDO DE TRABAJO: si alguna herramienta es LENTA, avisa cada tanto ("sigo en ello")
+            # mientras corre, para que Marco sepa que no se colgó. Las rápidas no lo activan.
+            from Nucleo_Slide.Latido_Trabajo import latido
+            _lat = latido(decir).iniciar() if any(n in _TOOLS_LENTAS for n in nombres) else None
+            try:
+                if len(tool_calls_list) > 1 and all(n in _TOOLS_PARALELAS for n in nombres):
+                    # Varias consultas de SOLO LECTURA -> en PARALELO (mucho más rápido).
+                    from concurrent.futures import ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=min(4, len(tool_calls_list))) as _ex:
+                        resultados = list(_ex.map(
+                            lambda tc: _ejecutar_tool_call(tc['function']['name'],
+                                                           tc['function']['arguments']),
+                            tool_calls_list))
+                else:
+                    resultados = [_ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
+                                  for tc in tool_calls_list]
+            finally:
+                if _lat:
+                    _lat.detener()
             hubo_error_tool = False
             for tc, resultado in zip(tool_calls_list, resultados):
                 print(f"Resultado de {tc['function']['name']}: {resultado}")

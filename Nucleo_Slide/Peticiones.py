@@ -63,6 +63,22 @@ _MAPA_MUSICA = {
     "detener": "parar", "parar": "parar", "para la musica": "parar",
 }
 
+# Atajos de teclado comunes dichos en natural -> combo (lo que Marco hace a diario con Ctrl+letra).
+# Se ejecutan al instante (sin LLM) sobre la ventana que tenga el foco.
+_ATAJOS_COMUNES = {
+    "copia": "ctrl c", "copiar": "ctrl c", "copia esto": "ctrl c",
+    "pega": "ctrl v", "pegar": "ctrl v", "pega esto": "ctrl v", "pega aqui": "ctrl v",
+    "corta": "ctrl x", "cortar": "ctrl x", "corta esto": "ctrl x",
+    "deshaz": "ctrl z", "deshacer": "ctrl z", "deshaz eso": "ctrl z",
+    "rehaz": "ctrl y", "rehacer": "ctrl y",
+    "guarda": "ctrl s", "guardar": "ctrl s", "guarda el archivo": "ctrl s", "guarda esto": "ctrl s",
+    "busca en la pagina": "ctrl f", "buscar en la pagina": "ctrl f", "buscar en esta pagina": "ctrl f",
+    "recarga": "f5", "refresca": "f5", "actualiza la pagina": "f5", "recarga la pagina": "f5",
+    "nueva pestana": "ctrl t", "abre una pestana": "ctrl t",
+    "reabre la pestana": "ctrl shift t", "recupera la pestana": "ctrl shift t",
+    "imprime": "ctrl p", "imprimir": "ctrl p",
+}
+
 # VARIEDAD VIVA: respuestas enlatadas con repertorio (que no suene a bot de frase única).
 _R_QUEDATE = ("Aquí me quedo, señor.", "No me muevo de aquí.", "A su lado, señor.",
               "Me quedo, por supuesto.")
@@ -195,6 +211,10 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
             return ("atajo_teclado", combo_txt)
         # si no, sigue de largo: probablemente es "pulsa el botón X" (clic, más abajo)
 
+    # ATAJOS COMUNES de teclado por nombre natural (lo que Marco hace con Ctrl+letra), cero LLM.
+    if p in _ATAJOS_COMUNES:
+        return ("atajo_teclado", _ATAJOS_COMUNES[p])
+
     mdc = re.search(r"^(?:haz |dame |dale )?doble clic (?:en |sobre |a )?(.+)$", p)
     if mdc and mdc.group(1).strip():
         return ("clic_pantalla", (mdc.group(1).strip(), "doble"))
@@ -290,6 +310,16 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
                             "como resuelvo esto", "resuelveme esto", "explicame esto que tengo",
                             "resuelve la pregunta")):
         return ("resolver", "pantalla")
+
+    # VOZ -> CLAUDE CODE: "dile a claude que X" / "pídele a claude code que Y" -> AIDEN le dicta la
+    # tarea de programación a Claude Code sobre su propio repo (en 2do plano, con latido de avance).
+    for gatillo in ("dile a claude code que ", "pidele a claude code que ", "claude code ",
+                    "dile a claude que ", "pidele a claude que ", "encargale a claude que ",
+                    "dictale a claude que "):
+        if p.startswith(gatillo):
+            tarea = original[len(gatillo):].strip()
+            if len(tarea) >= 4:
+                return ("claude_code", tarea)
 
     # MODO AGENTE: "encárgate de X" -> AIDEN cumple la meta sola. Captura el objetivo (lo que sigue).
     for gatillo in ("encargate de ", "ocupate de ", "hazte cargo de ", "modo agente ",
@@ -592,11 +622,18 @@ def Procesar_Peticion(texto, ventana):
                 ("Déjeme escribirlo, señor; un momento.", "Me pongo a redactarlo, señor.",
                  "Enseguida se lo tengo, señor.")))
             from Funciones_Slide.Info.Redactor import redactar_documento
-            respuesta_slide = redactar_documento(_tema, _tipo_doc)
+            from Nucleo_Slide.Latido_Trabajo import latido
+            with latido(hablado_del_asistente):   # avisa "sigo en ello" si tarda
+                respuesta_slide = redactar_documento(_tema, _tipo_doc)
         elif tipo == "resolver":
             hablado_del_asistente("Déjeme verlo, señor.")
             from Funciones_Slide.Info.Estudio import resolver_visual
-            respuesta_slide = resolver_visual(dato)
+            from Nucleo_Slide.Latido_Trabajo import latido
+            with latido(hablado_del_asistente):
+                respuesta_slide = resolver_visual(dato)
+        elif tipo == "claude_code":
+            from Funciones_Slide.Sistema.Programador import pedir_a_claude_code
+            respuesta_slide = pedir_a_claude_code(dato)
         elif tipo == "agente":
             # AIDEN se encarga de la meta completa (narra el avance él mismo por voz).
             from Nucleo_Slide.Agente import modo_agente

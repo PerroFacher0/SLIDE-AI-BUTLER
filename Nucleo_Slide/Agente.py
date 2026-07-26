@@ -121,8 +121,11 @@ def modo_agente(objetivo, hablar=None, max_pasos=MAX_PASOS):
             decir(contenido)
 
         if tcs:
+            from Nucleo_Slide.Latido_Trabajo import latido
             for tc in tcs:
-                resultado = _ejecutar_tool_call(tc.function.name, tc.function.arguments)
+                # Latido por acción: si un paso tarda (una orden lenta en el PC), avisa que sigue.
+                with latido(decir):
+                    resultado = _ejecutar_tool_call(tc.function.name, tc.function.arguments)
                 mensajes.append({"role": "tool", "tool_call_id": tc.id, "content": resultado})
                 acciones += 1
             _mundo(evento=f"Agente paso {paso + 1}: {', '.join(tc.function.name for tc in tcs)}")

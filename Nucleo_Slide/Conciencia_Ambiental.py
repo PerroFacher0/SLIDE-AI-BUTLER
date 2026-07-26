@@ -32,7 +32,7 @@ TEMPERATURA = 0.4
 _PROHIBIDAS = {
     "Enviar_mensaje_Whatsapp", "llamada_whatsapp", "colgar", "contestar_llamada",
     "controlar_energia", "cerrar_aplicacion", "Salir", "Auto_Modificacion",
-    "crear_proyecto", "ejecutar_proyecto", "dictar", "control_ventana",
+    "proyecto", "pedir_a_claude_code", "dictar", "control_ventana",
     "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "ejecutar_mision", "investigar",
     "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
 }
@@ -61,7 +61,7 @@ _INSTRUCCIONES = (
     "- Si actúas, hazlo y/o dilo en UNA sola frase corta y natural.\n"
     "- AUTO-MEJORA (estilo Jarvis): si notas que te FALTA una capacidad o que algo se repite y "
     "podrías resolverlo mejor, PROPÓNLO en una frase ('Señor, podría crear una habilidad para X, "
-    "¿la construyo?') y, si quieres, anótalo con tomar_nota. NUNCA te auto-modifiques solo: Marco "
+    "¿la construyo?') y, si quieres, anótalo con notas. NUNCA te auto-modifiques solo: Marco "
     "decide y lo construyes solo cuando él lo apruebe.\n"
     "- Si NO vale la pena, responde EXACTAMENTE: NADA\n"
     "- Eres el Jarvis PRESENTE: aportas cuando puedes sumar, con criterio y chispa, sin atosigar."

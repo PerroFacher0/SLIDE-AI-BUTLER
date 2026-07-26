@@ -30,3 +30,12 @@ def leer_notas():
         return "Tus notas:\n" + "\n".join(lineas[-15:])   # las ultimas 15
     except Exception as e:
         return f"No pude leer las notas, señor: {e}"
+
+
+def notas(accion="leer", texto=""):
+    """HERRAMIENTA unificada de notas. accion 'guardar' (con texto) apunta una nota; accion 'leer'
+    (por defecto) lee las últimas. Reemplaza tomar_nota + leer_notas sin perder nada."""
+    a = str(accion or "").strip().lower()
+    if a in ("guardar", "anotar", "apuntar", "toma", "tomar", "agregar", "nueva") or (texto and a != "leer"):
+        return tomar_nota(texto)
+    return leer_notas()

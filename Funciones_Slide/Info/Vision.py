@@ -72,6 +72,16 @@ def analizar_vision(consulta=""):
     return _describir_imagen(frame, instruccion)
 
 
+def analizar(fuente="pantalla", consulta=""):
+    """HERRAMIENTA unificada de visión: describe/analiza lo que AIDEN ve. fuente 'pantalla' (por
+    defecto) mira la PANTALLA; fuente 'camara' mira por la CÁMARA. Reemplaza analizar_pantalla +
+    analizar_vision sin perder nada. (Para RESOLVER un problema a fondo usa resolver_visual.)"""
+    f = str(fuente or "pantalla").lower()
+    if "cam" in f or "camara" in f or "ves" in f or "webcam" in f:
+        return analizar_vision(consulta)
+    return analizar_pantalla(consulta)
+
+
 def analizar_pantalla(consulta=""):
     try:
         from PIL import ImageGrab

@@ -2,10 +2,10 @@ from Funciones_Slide.Comunicacion.Funciones_Variadas import Enviar_mensaje_Whats
 from Funciones_Slide.Productividad.Gestion_datos import guardar_en_json
 from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Apps, Abrir_Videos_Youtube, Buscar_en_Google, Salir
 from Funciones_Slide.Sistema.Funciones_Sistema import cerrar_aplicacion, ver_apps_abiertas, clima, buscar_en_internet, leer_portapapeles, control_musica, control_volumen, estado_sistema
-from Nucleo_Slide.Memoria import recordar, olvidar
-from Funciones_Slide.Info.Vision import analizar_vision, analizar_pantalla
-from Funciones_Slide.Info.Finanzas import consultar_accion, mis_acciones
-from Funciones_Slide.Productividad.Notas import tomar_nota, leer_notas
+from Nucleo_Slide.Memoria import memoria
+from Funciones_Slide.Info.Vision import analizar
+from Funciones_Slide.Info.Finanzas import acciones
+from Funciones_Slide.Productividad.Notas import notas
 from Funciones_Slide.Comunicacion.Llamadas import contestar_llamada
 from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, ajustar_brillo, buscar_archivo
 from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
@@ -33,7 +33,7 @@ from Funciones_Slide.Info.Noticias import noticias_del_dia
 from Funciones_Slide.Info.Experto import consultar_experto
 from Funciones_Slide.Info.Codigo import explicar_error
 from Nucleo_Slide.Memoria_Episodica import recordar_conversacion
-from Funciones_Slide.Sistema.Programador import crear_proyecto, ejecutar_proyecto
+from Funciones_Slide.Sistema.Programador import proyecto
 
 
 
@@ -248,29 +248,12 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "consultar_accion",
-            "description": "Consulta el precio actual de una acción, criptomoneda o materia prima, cuánto subió o bajó hoy, el precio objetivo de los analistas (cuántos dólares faltan para alcanzarlo) y su recomendación (comprar/mantener/vender). Úsala cuando Marco pregunte por el precio de algo: una acción (ej. NVDA, PLTR, MSTR), el oro, bitcoin, petróleo, etc.",
+            "name": "acciones",
+            "description": "Bolsa/inversiones de Marco. Con 'simbolo' consulta el precio, cambio del día, objetivo de analistas y recomendación de ESE activo (acción como NVDA/PLTR/MSTR, o el oro, bitcoin, petróleo...). SIN símbolo, da el resumen de su watchlist (NVDA/CRWV/ISRG/PLTR/MSTR) + su portafolio (cuánto tiene, cuánto vale hoy, cuánto gana/pierde). Úsala para el precio de algo, cómo van sus acciones, su portafolio o cuánto ganó/perdió.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "simbolo": {
-                        "type": "string",
-                        "description": "El símbolo o nombre del activo (ej. 'NVDA', 'PLTR', 'oro', 'bitcoin'). Para acciones usa el ticker en inglés."
-                    }
-                },
-                "required": ["simbolo"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "mis_acciones",
-            "description": "Información de las acciones de Marco: el RESUMEN de mercado (precio, cambio del día, precio objetivo y recomendación de su watchlist NVDA/CRWV/ISRG/PLTR/MSTR) y/o su PORTAFOLIO (cuántas tiene, a qué precio compró, cuánto vale hoy y cuánto gana/pierde). Úsala cuando pregunte cómo van sus acciones, su portafolio, cuánto ganó/perdió o cuánto tiene invertido.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "tipo": {"type": "string", "description": "'resumen' (solo mercado de su watchlist), 'portafolio' (solo sus posiciones y ganancia/pérdida), o 'todo' (ambos). Opcional, por defecto 'todo'."}
+                    "simbolo": {"type": "string", "description": "El activo a consultar (ej. 'NVDA', 'oro', 'bitcoin'). Vacío para el resumen de su watchlist + portafolio."}
                 },
                 "required": []
             }
@@ -279,15 +262,13 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "analizar_vision",
-            "description": "Usa la cámara para VER el entorno y analizarlo. Úsala cuando Marco pregunte qué ves, qué es algo que te muestra, que mires u observes algo, o pida tu opinión sobre un objeto. Identificas lo que hay y das sugerencias útiles si algo está dañado o mejorable.",
+            "name": "analizar",
+            "description": "AIDEN VE y analiza (describe) lo que hay delante. fuente 'pantalla' (por defecto) mira la PANTALLA del PC (un texto, un error, algo que Marco muestra); fuente 'camara' mira por la CÁMARA (el entorno, un objeto). Úsala cuando Marco pregunte qué ves, que mires/observes algo, o pida tu opinión. Para RESOLVER a fondo un problema/ejercicio de la pantalla, usa resolver_visual (no esta).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "consulta": {
-                        "type": "string",
-                        "description": "Lo que Marco quiere saber sobre lo que ve la cámara (opcional, ej. 'qué le pasa a esto')."
-                    }
+                    "fuente": {"type": "string", "description": "pantalla (por defecto) | camara"},
+                    "consulta": {"type": "string", "description": "Lo que Marco quiere saber sobre lo que ves (opcional)."}
                 },
                 "required": []
             }
@@ -479,23 +460,6 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "analizar_pantalla",
-            "description": "Toma una captura de la PANTALLA del computador y la analiza. Úsala cuando Marco pregunte qué hay en su pantalla, le pida explicar un error de código, resumir un texto/artículo que tiene abierto, o ayudar con algo que está viendo en el PC.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "consulta": {
-                        "type": "string",
-                        "description": "Lo que Marco quiere saber sobre su pantalla (opcional, ej. 'qué significa este error')."
-                    }
-                },
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "leer_portapapeles",
             "description": "Lee lo que Marco tiene copiado (portapapeles) para poder explicarlo, traducirlo o resumirlo. Úsala cuando Marco diga 'explica/traduce/resume lo que copié' o se refiera a algo que acaba de copiar.",
             "parameters": {"type": "object", "properties": {}, "required": []}
@@ -521,61 +485,29 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "tomar_nota",
-            "description": "Guarda una nota rápida de Marco en su lista de notas. Úsala cuando Marco diga 'anota que...', 'apunta...', 'recuérdame esta tarea' o quiera guardar algo para después.",
+            "name": "notas",
+            "description": "Notas rápidas de Marco. accion 'guardar' (con texto) apunta una nota ('anota que...', 'apunta...'); accion 'leer' (por defecto) lee sus últimas notas ('¿qué tenía apuntado?').",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "nota": {
-                        "type": "string",
-                        "description": "El texto de la nota a guardar."
-                    }
+                    "accion": {"type": "string", "description": "guardar | leer (por defecto)"},
+                    "texto": {"type": "string", "description": "El texto de la nota (solo para guardar)."}
                 },
-                "required": ["nota"]
+                "required": []
             }
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "leer_notas",
-            "description": "Lee las notas que Marco ha guardado. Úsala cuando pregunte por sus notas, qué tenía apuntado, o su lista de pendientes.",
-            "parameters": {"type": "object", "properties": {}, "required": []}
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "recordar",
-            "description": "Guarda en memoria PERMANENTE un dato importante sobre Marco para recordarlo en futuras sesiones (su nombre, gustos, fechas, datos personales, preferencias). Úsala cuando Marco te pida recordar algo o cuente algo que valga la pena guardar. Si te da varias cosas, llámala una vez por cada dato.",
+            "name": "memoria",
+            "description": "Memoria PERMANENTE sobre Marco (persiste entre sesiones: nombre, gustos, fechas, hardware, preferencias). accion 'recordar' (por defecto) guarda un dato; accion 'olvidar' borra los que coincidan. Úsala cuando Marco pida recordar/olvidar algo o cuente algo que valga la pena guardar (una llamada por dato).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dato": {
-                        "type": "string",
-                        "description": "El dato a recordar, redactado corto y claro (ej. 'A Marco le gusta el fútbol')."
-                    },
-                    "categoria": {
-                        "type": "string",
-                        "description": "Categoría corta del dato (ej. 'gustos', 'estudios', 'fechas', 'hardware', 'trabajo'). Opcional."
-                    }
-                },
-                "required": ["dato"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "olvidar",
-            "description": "Borra de la memoria permanente un dato sobre Marco. Úsala cuando Marco te pida olvidar algo, que ya no es cierto, o que borres un recuerdo.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "dato": {
-                        "type": "string",
-                        "description": "Palabra o frase que identifica el recuerdo a borrar (ej. 'fútbol', 'cumpleaños')."
-                    }
+                    "accion": {"type": "string", "description": "recordar (por defecto) | olvidar"},
+                    "dato": {"type": "string", "description": "El dato a recordar (corto y claro), o la palabra que identifica el recuerdo a olvidar."},
+                    "categoria": {"type": "string", "description": "Categoría corta al recordar (ej. 'gustos', 'estudios'). Opcional."}
                 },
                 "required": ["dato"]
             }
@@ -585,7 +517,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "Auto_Modificacion",
-            "description": "Hace que AIDEN APRENDA UNA HABILIDAD nueva para SÍ MISMO (una función que gana como capacidad), escrita por Claude Code y recargada en vivo. Úsala cuando Marco te ordene 'aprende a...', 'prográmate una función para...', 'automatiza...'. Corre en segundo plano y avisa al terminar. Para crear un PROYECTO o app SEPARADO usa crear_proyecto.",
+            "description": "Hace que AIDEN APRENDA UNA HABILIDAD nueva para SÍ MISMO (una función que gana como capacidad), escrita por Claude Code y recargada en vivo. Úsala cuando Marco te ordene 'aprende a...', 'prográmate una función para...', 'automatiza...'. Corre en segundo plano y avisa al terminar. Para crear un PROYECTO o app SEPARADO usa proyecto (accion crear).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -672,7 +604,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "explicar_error",
-            "description": "Explica un ERROR de programación o un traceback y dice cómo arreglarlo (para principiante). Si Marco no dicta el error, lee el que tenga COPIADO en el portapapeles. Úsala cuando Marco diga 'explícame este error', 'qué significa este error', 'por qué me sale este error' o pida ayuda con un error de código. (Si el error está EN PANTALLA y no copiado, usa analizar_pantalla.)",
+            "description": "Explica un ERROR de programación o un traceback y dice cómo arreglarlo (para principiante). Si Marco no dicta el error, lee el que tenga COPIADO en el portapapeles. Úsala cuando Marco diga 'explícame este error', 'qué significa este error', 'por qué me sale este error' o pida ayuda con un error de código. (Si el error está EN PANTALLA y no copiado, usa analizar.)",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -700,28 +632,15 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "crear_proyecto",
-            "description": "Construye un PROYECTO o programa REAL delegando a Claude Code (escribe los archivos por ti, completos y funcionales). Usala cuando Marco pida crear/programar una app, script, juego, herramienta o proyecto entero ('creame', 'programame', 'hazme un programa que...'). Tarda: corre en SEGUNDO PLANO y AIDEN avisa al terminar. NO la uses para preguntas ni para UNA funcion simple para el propio AIDEN (eso es Auto_Modificacion).",
+            "name": "proyecto",
+            "description": "Proyectos/programas REALES construidos por Claude Code. accion 'crear' (por defecto, con 'instruccion') delega a Claude Code que escriba los archivos completos en un sandbox ('créame', 'prográmame', 'hazme un programa que...'); tarda, corre en 2do plano y AIDEN avisa al terminar. accion 'ejecutar' corre el código de un proyecto ya creado ('ejecuta el proyecto', 'pruébalo'). NO para una función simple del propio AIDEN (eso es Auto_Modificacion) ni para tareas sobre el código de AIDEN (eso es pedir_a_claude_code).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "instruccion": {"type": "string", "description": "Que construir, en alto nivel (ej. 'una calculadora con interfaz en Python', 'un juego de la culebra')."},
-                    "nombre": {"type": "string", "description": "Nombre corto para la carpeta del proyecto. Opcional."}
-                },
-                "required": ["instruccion"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "ejecutar_proyecto",
-            "description": "Ejecuta (corre) el codigo Python de un proyecto que AIDEN ya creo y devuelve su salida. Usala cuando Marco diga 'ejecuta/corre el proyecto', 'pruebalo', 'a ver si funciona'. Por defecto corre el proyecto mas reciente.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre": {"type": "string", "description": "Nombre del proyecto a ejecutar. Opcional; por defecto el mas reciente."},
-                    "archivo": {"type": "string", "description": "Archivo .py especifico a correr. Opcional; por defecto main.py/app.py."}
+                    "accion": {"type": "string", "description": "crear (por defecto) | ejecutar"},
+                    "instruccion": {"type": "string", "description": "Qué construir, en alto nivel (solo para crear)."},
+                    "nombre": {"type": "string", "description": "Nombre corto de la carpeta del proyecto. Opcional."},
+                    "archivo": {"type": "string", "description": "Archivo .py específico a correr (solo para ejecutar). Opcional."}
                 },
                 "required": []
             }
@@ -731,7 +650,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "controlar_pantalla",
-            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, ARRASTRAR una cosa hasta otra, ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar_pantalla). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
+            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, ARRASTRAR una cosa hasta otra, ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -762,7 +681,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "ejecutar_mision",
-            "description": "MISIÓN autónoma: para una ORDEN GRANDE de construir algo ('hazme un programa/script/app que...'), AIDEN lo construye con Claude Code, VERIFICA que de verdad funciona, se autocorrige si falla y reporta. Úsala cuando Marco pida CREAR software de cierta envergadura y quiera que QUEDE funcionando. (Para una app simple o un proyecto sin verificar, está crear_proyecto.)",
+            "description": "MISIÓN autónoma: para una ORDEN GRANDE de construir algo ('hazme un programa/script/app que...'), AIDEN lo construye con Claude Code, VERIFICA que de verdad funciona, se autocorrige si falla y reporta. Úsala cuando Marco pida CREAR software de cierta envergadura y quiera que QUEDE funcionando. (Para una app simple o un proyecto sin verificar, está proyecto con accion crear.)",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -805,7 +724,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "mis_gastos",
-            "description": "Reporta cuánto ha GASTADO Marco (de sus cuentas Nequi y Nu, leídas vía Belvo). Úsala cuando pregunte '¿cuánto llevo gastado?', '¿cuánto gasté este mes/semana/hoy?', 'mis gastos'. Distinta de mis_acciones/consultar_accion (eso es inversiones, no gasto diario).",
+            "description": "Reporta cuánto ha GASTADO Marco (de sus cuentas Nequi y Nu, leídas vía Belvo). Úsala cuando pregunte '¿cuánto llevo gastado?', '¿cuánto gasté este mes/semana/hoy?', 'mis gastos'. Distinta de acciones (eso es inversiones, no gasto diario).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -850,7 +769,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "programar_orden",
-            "description": "RECADOS CONDICIONALES de Marco: 'en 20 minutos dime que saque la pizza', 'a las 9:30 recuérdame llamar a mamá', 'cuando abra Chrome recuérdame revisar el correo'. Guardas el recado y AIDEN lo dice SOLO cuando la condición se cumpla. También listar y cancelar. Distinta de tomar_nota (eso es apuntar, esto es DISPARAR un aviso).",
+            "description": "RECADOS CONDICIONALES de Marco: 'en 20 minutos dime que saque la pizza', 'a las 9:30 recuérdame llamar a mamá', 'cuando abra Chrome recuérdame revisar el correo'. Guardas el recado y AIDEN lo dice SOLO cuando la condición se cumpla. También listar y cancelar. Distinta de notas (eso es apuntar, esto es DISPARAR un aviso).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -999,7 +918,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "resolver_visual",
-            "description": "Mira lo que Marco tiene en PANTALLA (o en la cámara) y lo RESUELVE/explica a fondo con el cerebro experto: un problema de mates/física, una pregunta, un texto difícil, un error de código. Úsala cuando diga 'resuelve esto', 'ayúdame con este problema', 'cómo resuelvo esto', 'explícame esto que tengo aquí'. Distinta de analizar_pantalla (que solo describe).",
+            "description": "Mira lo que Marco tiene en PANTALLA (o en la cámara) y lo RESUELVE/explica a fondo con el cerebro experto: un problema de mates/física, una pregunta, un texto difícil, un error de código. Úsala cuando diga 'resuelve esto', 'ayúdame con este problema', 'cómo resuelvo esto', 'explícame esto que tengo aquí'. Distinta de analizar (que solo describe).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1027,12 +946,10 @@ tools_map = {
     "ver_apps_abiertas": ver_apps_abiertas,
     "clima": clima,
     "buscar_en_internet": buscar_en_internet,
-    "analizar_vision": analizar_vision,
-    "analizar_pantalla": analizar_pantalla,
+    "analizar": analizar,
     "leer_portapapeles": leer_portapapeles,
     "control_musica": control_musica,
-    "tomar_nota": tomar_nota,
-    "leer_notas": leer_notas,
+    "notas": notas,
     "contestar_llamada": contestar_llamada,
     "dictar": dictar,
     "abrir_carpeta": abrir_carpeta,
@@ -1045,10 +962,8 @@ tools_map = {
     "activar_protocolo": activar_protocolo,
     "modo_gaming": modo_gaming,
     "resumir": resumir,
-    "consultar_accion": consultar_accion,
-    "mis_acciones": mis_acciones,
-    "recordar": recordar,
-    "olvidar": olvidar,
+    "acciones": acciones,
+    "memoria": memoria,
     "noticias_del_dia": noticias_del_dia,
     "calculadora": calculadora,
     "convertir_moneda": convertir_moneda,
@@ -1056,8 +971,7 @@ tools_map = {
     "consultar_experto": consultar_experto,
     "explicar_error": explicar_error,
     "recordar_conversacion": recordar_conversacion,
-    "crear_proyecto": crear_proyecto,
-    "ejecutar_proyecto": ejecutar_proyecto,
+    "proyecto": proyecto,
     "controlar_pantalla": controlar_pantalla,
     "gestionar_metas": gestionar_metas,
     "ejecutar_mision": ejecutar_mision,

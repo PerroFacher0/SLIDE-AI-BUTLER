@@ -171,3 +171,13 @@ def mis_acciones(tipo="todo"):
     if "resum" in t or "mercado" in t or "watch" in t:
         return resumen_acciones()
     return resumen_acciones() + "\n\n" + mi_portafolio()
+
+
+def acciones(simbolo=""):
+    """HERRAMIENTA unificada de bolsa. Con 'simbolo' (ej. NVDA, ORO, BTC) consulta ESA acción/activo;
+    SIN símbolo, da el resumen de tu watchlist + tu portafolio. Reemplaza consultar_accion +
+    mis_acciones sin perder nada."""
+    s = str(simbolo or "").strip()
+    if s and s.lower() not in ("todo", "todas", "mis acciones", "portafolio", "resumen"):
+        return consultar_accion(s)
+    return mis_acciones("todo" if not s else s)
