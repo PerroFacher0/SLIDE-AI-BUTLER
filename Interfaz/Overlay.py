@@ -27,15 +27,17 @@ REFRESCO_MS = 1200     # cadencia del CONTENIDO (barato: son unos archivos json 
 ANIM_MS = 60            # cadencia del latido (puro dibujo vectorial, casi gratis)
 _MAX_EVENTOS = 1
 
-# Un solo acento de color según el MOMENTO real de Marco — se usa con moderación (el latido + la
-# palabra de estado), no tiñe todo el panel. Mismos datos de siempre; ahora se leen de un vistazo.
+# Paleta MONOCROMA (a pedido de Marco: "más serio... gris tonalizado, blanco o plateado"). Nada de
+# arcoíris: el MOMENTO de Marco se lee por el BRILLO de un mismo gris/plata neutro, no por el matiz
+# — normal es plata en calma; lo que pide silencio (reunión/gaming) se atenúa; lo que pide atención
+# (taller, y sobre todo una misión activa) se aclara hasta el blanco. Mismos datos; más serio.
 _TEMAS = {
-    "normal":  (0, 224, 200, "en línea"),
-    "reunion": (240, 170, 80, "reunión"),
-    "taller":  (170, 130, 240, "taller"),
-    "agente":  (235, 100, 165, "misión"),
-    "gaming":  (235, 110, 95, "gaming"),
-    "ausente": (110, 124, 136, "ausente"),
+    "normal":  (198, 198, 198, "en línea"),
+    "reunion": (146, 146, 146, "reunión"),
+    "taller":  (224, 224, 224, "taller"),
+    "agente":  (255, 255, 255, "misión"),
+    "gaming":  (128, 128, 128, "gaming"),
+    "ausente": (96, 96, 96, "ausente"),
 }
 
 
@@ -98,7 +100,7 @@ def _construir_html(rgb, etiqueta):
     # texto, sin pastillas ni fondos) + una línea fina que separa, todo con aire.
     partes = [
         "<div style='margin-left:28px;'>"
-        "<span style='font-size:12.5px;font-weight:600;color:#e7eef4;letter-spacing:2.2px;'>AIDEN</span>"
+        "<span style='font-size:12.5px;font-weight:600;color:#eef0f1;letter-spacing:2.2px;'>AIDEN</span>"
         f"<span style='float:right;font-size:10.5px;color:{acc};letter-spacing:0.3px;'>{_esc(etiqueta)}</span>"
         "</div>",
         "<div style='border-top:1px solid rgba(255,255,255,16);margin:9px 0 10px;'></div>",
@@ -107,15 +109,15 @@ def _construir_html(rgb, etiqueta):
     pen = _pensamiento()
     if pen:
         partes.append(
-            f"<div style='color:#a9b8c4;font-size:11px;font-style:italic;line-height:1.5;"
+            f"<div style='color:#a7abae;font-size:11px;font-style:italic;line-height:1.5;"
             f"padding-left:9px;border-left:1.5px solid rgba({r},{g},{b},110);'>{_esc(pen)[:110]}</div>"
         )
 
     def _fila(etiqueta_fila, valor, top=10):
         return (
             f"<div style='margin-top:{top}px;'>"
-            f"<span style='color:#5f7284;font-size:9.5px;letter-spacing:0.6px;'>{etiqueta_fila}</span>"
-            f"&nbsp;&nbsp;<span style='color:#d7e2ea;font-size:11px;'>{valor}</span></div>"
+            f"<span style='color:#75787c;font-size:9.5px;letter-spacing:0.6px;'>{etiqueta_fila}</span>"
+            f"&nbsp;&nbsp;<span style='color:#d6d8da;font-size:11px;'>{valor}</span></div>"
         )
 
     partes.append(_fila("PERCIBE", _esc(_foco_vivo(est))[:40]))
@@ -128,12 +130,12 @@ def _construir_html(rgb, etiqueta):
     if evs:
         e = evs[-1]
         partes.append(_fila("AHORA", f"{_esc(e.get('texto',''))[:38]}"
-                                     f" <span style='color:#5f7284;font-size:9.5px;'>· {_esc(e.get('hora',''))}</span>"))
+                                     f" <span style='color:#75787c;font-size:9.5px;'>· {_esc(e.get('hora',''))}</span>"))
 
     refl = _reflexion_corta()
     if refl:
         partes.append(
-            f"<div style='color:#5f7284;font-size:10px;font-style:italic;margin-top:11px;"
+            f"<div style='color:#75787c;font-size:10px;font-style:italic;margin-top:11px;"
             f"border-top:1px solid rgba(255,255,255,12);padding-top:8px;'>{_esc(refl)}</div>"
         )
     return "".join(partes)
@@ -169,7 +171,7 @@ class OverlayJarvis(QWidget):
         # Fondo grafito, borde NEUTRO y casi invisible (el color vive en el latido y el estado, no
         # en el marco): así el panel se siente premium y tranquilo, no "todo teñido".
         self.setStyleSheet(
-            "QWidget { background: rgba(9,12,17,215); border: 1px solid rgba(255,255,255,22);"
+            "QWidget { background: rgba(13,13,14,215); border: 1px solid rgba(255,255,255,22);"
             " border-radius: 14px; }"
         )
         self.resize(ANCHO, ALTO)
@@ -250,8 +252,16 @@ class OverlayJarvis(QWidget):
         p.setPen(Qt.NoPen)
         p.drawEllipse(QPointF(cx, cy), 7.5, 7.5)
 
-        p.setBrush(QBrush(QColor(r, g, b, min(255, int(190 + 60 * pulso)))))
-        p.drawEllipse(QPointF(cx, cy), 2.6, 2.6)
+        # Núcleo con un toque metálico (esfera de plata pulida): brillo blanco descentrado que se
+        # funde hacia el gris del estado — no un punto plano, un reflejo real.
+        nucleo = QRadialGradient(cx - 1.0, cy - 1.1, 3.4)
+        nucleo.setColorAt(0.0, QColor(255, 255, 255, min(255, int(235 + 20 * pulso))))
+        nucleo.setColorAt(0.55, QColor(r, g, b, min(255, int(210 + 45 * pulso))))
+        nucleo.setColorAt(1.0, QColor(max(0, r - 35), max(0, g - 35), max(0, b - 35),
+                                      min(255, int(190 + 45 * pulso))))
+        p.setBrush(QBrush(nucleo))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(cx, cy), 2.7, 2.7)
 
 
 def crear_overlay():

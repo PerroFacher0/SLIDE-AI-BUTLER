@@ -1,13 +1,13 @@
 <title>AIDEN — vista previa del overlay</title>
 <style>
   :root{
-    --ground-1:#05070a;
-    --panel-bg:rgba(9,12,17,.86);
+    --ground-1:#07080a;
+    --panel-bg:rgba(13,13,14,.86);
     --panel-border:rgba(255,255,255,.09);
-    --text-hi:#e7eef4;
-    --text-value:#d7e2ea;
-    --text-label:#5f7284;
-    --text-thought:#a9b8c4;
+    --text-hi:#eef0f1;
+    --text-value:#d6d8da;
+    --text-label:#75787c;
+    --text-thought:#a7abae;
     --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
     --sys: -apple-system, "Segoe UI", Roboto, sans-serif;
   }
@@ -16,8 +16,8 @@
   body{
     min-height:100vh;
     background:
-      radial-gradient(1100px 620px at 78% 8%, #0d141d 0%, transparent 60%),
-      linear-gradient(180deg, var(--ground-1), #030405 85%);
+      radial-gradient(1100px 620px at 78% 8%, #131415 0%, transparent 60%),
+      linear-gradient(180deg, var(--ground-1), #030303 85%);
     color:var(--text-hi);
     font-family:var(--mono);
     display:flex;flex-direction:column;align-items:center;
@@ -25,10 +25,10 @@
     padding:48px 20px 60px;
   }
 
-  .eyebrow{ font-size:11px;letter-spacing:3px;color:#4b5a68;text-transform:uppercase; }
+  .eyebrow{ font-size:11px;letter-spacing:3px;color:#5a5c5e;text-transform:uppercase; }
   h1{ margin:0;font-size:15px;font-weight:600;letter-spacing:.4px;color:var(--text-hi); text-wrap:balance; }
   .sub{
-    margin:-8px 0 4px;font-size:11.5px;color:#5f7284;max-width:520px;text-align:center;line-height:1.6;
+    margin:-8px 0 4px;font-size:11.5px;color:var(--text-label);max-width:520px;text-align:center;line-height:1.6;
   }
 
   /* ── el "monitor": escenario donde vive el overlay ─────────────────────── */
@@ -37,8 +37,8 @@
     position:relative;
     width:100%; min-width:640px; aspect-ratio:16/9;
     background:
-      radial-gradient(700px 380px at 30% 20%, #131b24 0%, transparent 55%),
-      linear-gradient(155deg, #0b0f14, #060809 70%);
+      radial-gradient(700px 380px at 30% 20%, #191a1b 0%, transparent 55%),
+      linear-gradient(155deg, #0e0f10, #060606 70%);
     border:1px solid rgba(255,255,255,.06);
     border-radius:18px;
     box-shadow: 0 30px 70px -20px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.02);
@@ -54,20 +54,20 @@
             mask-image:radial-gradient(circle at 30% 25%, #000 0%, transparent 62%);
   }
 
-  /* Resplandor ambiental: el acento del momento tiñe muy suavemente la escena, como si AIDEN
-     emitiera luz propia — no es un elemento que se "note", es algo que se siente. */
+  /* Resplandor ambiental: el BRILLO del momento (no un color) tiñe muy suavemente la escena —
+     plata en calma, mas apagado si pide silencio, casi blanco si pide atención. */
   .ambient{
     position:absolute; right:-70px; bottom:-70px; width:440px; height:340px; z-index:0;
-    background:radial-gradient(closest-side, rgba(0,224,200,.15), transparent 72%);
+    background:radial-gradient(closest-side, rgba(198,198,198,.13), transparent 72%);
     filter:blur(4px);
     transition:background .7s ease;
     pointer-events:none;
   }
-  .monitor[data-state="reunion"] .ambient{ background:radial-gradient(closest-side, rgba(240,170,80,.15), transparent 72%); }
-  .monitor[data-state="taller"]  .ambient{ background:radial-gradient(closest-side, rgba(170,130,240,.15), transparent 72%); }
-  .monitor[data-state="agente"]  .ambient{ background:radial-gradient(closest-side, rgba(235,100,165,.15), transparent 72%); }
-  .monitor[data-state="gaming"]  .ambient{ background:radial-gradient(closest-side, rgba(235,110,95,.15), transparent 72%); }
-  .monitor[data-state="ausente"] .ambient{ background:radial-gradient(closest-side, rgba(110,124,136,.12), transparent 72%); }
+  .monitor[data-state="reunion"] .ambient{ background:radial-gradient(closest-side, rgba(146,146,146,.10), transparent 72%); }
+  .monitor[data-state="taller"]  .ambient{ background:radial-gradient(closest-side, rgba(224,224,224,.15), transparent 72%); }
+  .monitor[data-state="agente"]  .ambient{ background:radial-gradient(closest-side, rgba(255,255,255,.17), transparent 72%); }
+  .monitor[data-state="gaming"]  .ambient{ background:radial-gradient(closest-side, rgba(128,128,128,.09), transparent 72%); }
+  .monitor[data-state="ausente"] .ambient{ background:radial-gradient(closest-side, rgba(96,96,96,.07), transparent 72%); }
 
   /* ── el panel AIDEN — puerto fiel de Interfaz/Overlay.py ───────────────── */
   .panel{
@@ -89,35 +89,38 @@
       linear-gradient(180deg, rgba(255,255,255,.035), transparent 42%);
   }
 
-  .monitor[data-state="normal"]  .panel{ --accent-rgb:0,224,200;   }
-  .monitor[data-state="reunion"] .panel{ --accent-rgb:240,170,80;  }
-  .monitor[data-state="taller"]  .panel{ --accent-rgb:170,130,240; }
-  .monitor[data-state="agente"]  .panel{ --accent-rgb:235,100,165; }
-  .monitor[data-state="gaming"]  .panel{ --accent-rgb:235,110,95;  }
-  .monitor[data-state="ausente"] .panel{ --accent-rgb:110,124,136; }
+  /* Monocromo: el momento se lee por BRILLO (plata en calma -> blanco en misión), nunca por matiz. */
+  .monitor[data-state="normal"]  .panel{ --accent-rgb:198,198,198; }
+  .monitor[data-state="reunion"] .panel{ --accent-rgb:146,146,146; }
+  .monitor[data-state="taller"]  .panel{ --accent-rgb:224,224,224; }
+  .monitor[data-state="agente"]  .panel{ --accent-rgb:255,255,255; }
+  .monitor[data-state="gaming"]  .panel{ --accent-rgb:128,128,128; }
+  .monitor[data-state="ausente"] .panel{ --accent-rgb:96,96,96;   }
 
   .p-head{ display:flex; align-items:center; height:16px; position:relative; z-index:1; }
   .p-dot-wrap{ position:relative; width:16px; height:16px; margin-right:10px; flex:none; }
   .p-halo{
     position:absolute; inset:-6px;
     border-radius:50%;
-    background:radial-gradient(circle, rgba(var(--accent-rgb),.55) 0%, rgba(var(--accent-rgb),0) 70%);
+    background:radial-gradient(circle, rgba(var(--accent-rgb),.5) 0%, rgba(var(--accent-rgb),0) 70%);
     animation:latido 2.6s ease-in-out infinite;
   }
+  /* Núcleo con un toque metálico (esfera de plata pulida): brillo blanco descentrado que se
+     funde hacia el gris del estado — no un punto plano, un reflejo real. */
   .p-dot{
     position:absolute; inset:5px;
     border-radius:50%;
-    background:rgb(var(--accent-rgb));
+    background:radial-gradient(circle at 35% 30%, #fff 0%, rgb(var(--accent-rgb)) 78%);
     animation:nucleo 2.6s ease-in-out infinite;
-    transition:background-color .5s ease;
+    transition:filter .5s ease;
   }
   @keyframes latido{
-    0%,100%{ opacity:.55; transform:scale(.85); }
-    50%    { opacity:1;   transform:scale(1.18); }
+    0%,100%{ opacity:.5;  transform:scale(.85); }
+    50%    { opacity:.95; transform:scale(1.18); }
   }
   @keyframes nucleo{
-    0%,100%{ filter:brightness(.92); }
-    50%    { filter:brightness(1.25); }
+    0%,100%{ filter:brightness(.94); }
+    50%    { filter:brightness(1.12); }
   }
   @media (prefers-reduced-motion: reduce){
     .p-halo,.p-dot{ animation:none; opacity:.85; }
@@ -134,7 +137,7 @@
 
   .p-thought{
     color:var(--text-thought); font-size:11px; font-style:italic; line-height:1.5;
-    padding-left:9px; border-left:1.5px solid rgba(var(--accent-rgb),.43);
+    padding-left:9px; border-left:1.5px solid rgba(var(--accent-rgb),.4);
     margin-bottom:10px; position:relative; z-index:1;
     transition:border-left-color .5s ease;
   }
@@ -150,7 +153,7 @@
   }
 
   /* ── panel de control del preview (no forma parte del overlay real) ────── */
-  .ctrl-label{ font-size:9.5px; letter-spacing:2.5px; color:#3f4c58; text-align:center; }
+  .ctrl-label{ font-size:9.5px; letter-spacing:2.5px; color:#484a4c; text-align:center; }
   .swatches{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   .swatch{
     all:unset; cursor:pointer;
@@ -158,30 +161,31 @@
     padding:6px 12px; border-radius:20px;
     border:1px solid rgba(255,255,255,.09);
     background:rgba(255,255,255,.02);
-    font-family:var(--mono); font-size:10.5px; color:#8fa1af;
+    font-family:var(--mono); font-size:10.5px; color:#8a8c8e;
     transition:background .15s ease, border-color .15s ease, color .15s ease;
   }
   .swatch:hover{ background:rgba(255,255,255,.05); }
-  .swatch:focus-visible{ outline:2px solid #6fd8c8; outline-offset:2px; }
+  .swatch:focus-visible{ outline:2px solid #c7cacc; outline-offset:2px; }
   .swatch[aria-pressed="true"]{
     color:var(--text-hi); border-color:rgba(var(--sw-rgb),.5); background:rgba(var(--sw-rgb),.1);
   }
   .swatch i{
-    width:8px;height:8px;border-radius:50%; background:rgb(var(--sw-rgb));
-    box-shadow:0 0 8px 1px rgba(var(--sw-rgb),.55);
+    width:8px;height:8px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #fff 0%, rgb(var(--sw-rgb)) 78%);
+    box-shadow:0 0 8px 1px rgba(var(--sw-rgb),.4);
   }
 
   .footnote{
-    font-size:10.5px; color:#3f4c58; text-align:center; max-width:480px; line-height:1.7;
+    font-size:10.5px; color:#484a4c; text-align:center; max-width:480px; line-height:1.7;
   }
-  .footnote code{ color:#5f7284; }
+  .footnote code{ color:var(--text-label); }
 </style>
 
 <div class="eyebrow">Interfaz / Overlay.py</div>
 <h1>AIDEN — vista previa del HUD</h1>
 <p class="sub">
-  Réplica en HTML del overlay real (PySide6 + QPainter): mismos colores, mismo latido,
-  misma tipografía. Cambia el estado para ver los 6 acentos — la transición es suave, como en la app.
+  Réplica en HTML del overlay real (PySide6 + QPainter). Paleta monocroma: el momento se lee por
+  el BRILLO de un mismo gris/plata, nunca por el color. Cambia el estado para verlo.
 </p>
 
 <div class="stage-scroll">
@@ -209,12 +213,12 @@
 
 <div class="ctrl-label">ESTADO</div>
 <div class="swatches" role="group" aria-label="Estado del overlay">
-  <button class="swatch" style="--sw-rgb:0,224,200"   data-state="normal"  aria-pressed="true"><i></i>en línea</button>
-  <button class="swatch" style="--sw-rgb:240,170,80"  data-state="reunion"><i></i>reunión</button>
-  <button class="swatch" style="--sw-rgb:170,130,240" data-state="taller"><i></i>taller</button>
-  <button class="swatch" style="--sw-rgb:235,100,165" data-state="agente"><i></i>misión</button>
-  <button class="swatch" style="--sw-rgb:235,110,95"  data-state="gaming"><i></i>gaming</button>
-  <button class="swatch" style="--sw-rgb:110,124,136" data-state="ausente"><i></i>ausente</button>
+  <button class="swatch" style="--sw-rgb:198,198,198" data-state="normal"  aria-pressed="true"><i></i>en línea</button>
+  <button class="swatch" style="--sw-rgb:146,146,146" data-state="reunion"><i></i>reunión</button>
+  <button class="swatch" style="--sw-rgb:224,224,224" data-state="taller"><i></i>taller</button>
+  <button class="swatch" style="--sw-rgb:255,255,255" data-state="agente"><i></i>misión</button>
+  <button class="swatch" style="--sw-rgb:128,128,128" data-state="gaming"><i></i>gaming</button>
+  <button class="swatch" style="--sw-rgb:96,96,96"    data-state="ausente"><i></i>ausente</button>
 </div>
 
 <p class="footnote">
