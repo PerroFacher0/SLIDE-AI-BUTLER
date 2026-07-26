@@ -37,6 +37,13 @@ CORREO_IMAP = ""
 CORREO_USER = ""
 CORREO_PASS = ""
 
+# Contactos de CORREO para ENVIAR emails por nombre ("mándale un correo a mi profesor..."). La misma
+# clave de aplicacion (CORREO_PASS) sirve para enviar. Deja {} si prefieres dictar la direccion.
+CONTACTOS_CORREO = {
+    # "mi profesor": "profesor@unal.edu.co",
+    # "mama": "mama@gmail.com",
+}
+
 # CALENDARIO (para "¿que tengo hoy?" y el briefing). Pega la URL SECRETA en formato ICS de tu
 # calendario: Google Calendar -> Configuracion -> "Direccion secreta en formato iCal" (termina en .ics).
 # Deja "" si no lo usas; agenda_hoy te avisara que falta.

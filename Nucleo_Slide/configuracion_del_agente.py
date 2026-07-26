@@ -18,7 +18,7 @@ from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_pr
 from Funciones_Slide.Sistema.Taller import modo_taller
 from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
 from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
-from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy
+from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy, enviar_correo
 from Funciones_Slide.Sistema.Sesion import restaurar_sesion
 from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
 from Funciones_Slide.Info.Web import abrir_web
@@ -866,6 +866,22 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "enviar_correo",
+            "description": "ENVÍA un correo electrónico por Marco (distinto de revisar_correo, que solo LEE). Úsala cuando diga 'mándale un correo a X diciendo...', 'escríbele un email a...', 'envíale un correo a mi profesor...'. TÚ redactas un asunto adecuado y el mensaje. 'para' es la dirección de email o el nombre de un contacto guardado.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "para": {"type": "string", "description": "Dirección de correo (ej. 'profe@unal.edu.co') o nombre de un contacto guardado."},
+                    "asunto": {"type": "string", "description": "El asunto del correo (redáctalo tú, breve y claro)."},
+                    "mensaje": {"type": "string", "description": "El cuerpo del correo (redáctalo cortés y completo a partir de lo que pide Marco)."}
+                },
+                "required": ["para", "mensaje"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "matar_proceso",
             "description": "Cierra a la fuerza un programa/proceso por nombre. Úsala cuando Marco diga 'cierra Chrome a la fuerza', 'mata el proceso X', 'fuerza el cierre de Y' (p.ej. una app colgada).",
             "parameters": {
@@ -984,6 +1000,7 @@ tools_map = {
     "ejecutar_en_pc": ejecutar_en_pc,
     "revisar_correo": revisar_correo,
     "agenda_hoy": agenda_hoy,
+    "enviar_correo": enviar_correo,
     "restaurar_sesion": restaurar_sesion,
     "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
     "abrir_web": abrir_web,

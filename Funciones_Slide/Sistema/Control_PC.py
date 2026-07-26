@@ -95,6 +95,51 @@ def buscar_archivo(nombre):
     return f"Encontré y abrí: {os.path.basename(encontrados[0])}. También vi: {nombres}."
 
 
+def abrir_reciente(que="descarga"):
+    # Abre el archivo MÁS RECIENTE de una carpeta: lo último que Marco descargó / su último documento
+    # / su última captura. Lo que uno hace a diario ("abre lo que acabo de bajar").
+    q = str(que or "descarga").strip().lower()
+    if "document" in q or "word" in q or "pdf" in q or "trabajo" in q:
+        carpeta, exts = _CARPETAS["documentos"], (".docx", ".doc", ".pdf", ".pptx", ".xlsx", ".txt")
+        etiqueta = "documento"
+    elif "captur" in q or "foto" in q or "imagen" in q or "screenshot" in q:
+        carpeta, exts = _CARPETAS["imagenes"], (".png", ".jpg", ".jpeg", ".gif", ".webp")
+        etiqueta = "captura"
+    else:
+        carpeta, exts = _CARPETAS["descargas"], None   # descargas: cualquier tipo
+        etiqueta = "descarga"
+    if not os.path.isdir(carpeta):
+        return f"No encuentro la carpeta de {etiqueta}s, señor."
+    candidatos = []
+    for nombre in os.listdir(carpeta):
+        ruta = os.path.join(carpeta, nombre)
+        if not os.path.isfile(ruta):
+            continue
+        if nombre.endswith(".crdownload") or nombre.endswith(".tmp"):   # descarga a medias
+            continue
+        if exts and not nombre.lower().endswith(exts):
+            continue
+        candidatos.append(ruta)
+    if not candidatos:
+        return f"No veo ninguna {etiqueta} reciente, señor."
+    reciente = max(candidatos, key=os.path.getmtime)
+    try:
+        os.startfile(reciente)
+        return f"Abriendo su última {etiqueta}, señor: {os.path.basename(reciente)}."
+    except Exception as e:
+        return f"La encontré pero no pude abrirla, señor: {e}"
+
+
+def grabar_pantalla():
+    # Inicia/detiene la grabación de pantalla de Windows (Xbox Game Bar): Win+Alt+R (es un toggle).
+    try:
+        pyautogui.hotkey("win", "alt", "r")
+        return ("Grabación de pantalla activada, señor (Win+Alt+R). Dígame 'para la grabación' para "
+                "detenerla. Si no arrancó, active la Xbox Game Bar en Configuración.")
+    except Exception as e:
+        return f"No pude iniciar la grabación, señor: {e}"
+
+
 def controlar_energia(accion, minutos=0):
     accion = str(accion).strip().lower()
     try:

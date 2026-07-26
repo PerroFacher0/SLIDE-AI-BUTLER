@@ -13,8 +13,11 @@
 
 import email
 import imaplib
+import re
+import smtplib
 from datetime import datetime, date, timedelta
 from email.header import decode_header
+from email.mime.text import MIMEText
 
 try:
     import requests
@@ -28,6 +31,62 @@ def _cfg(nombre, defecto=""):
         return getattr(secretos, nombre, defecto)
     except Exception:
         return defecto
+
+
+# Host SMTP a partir del IMAP (mismo proveedor, misma clave de aplicación).
+_SMTP_POR_IMAP = {
+    "imap.gmail.com": ("smtp.gmail.com", 587),
+    "outlook.office365.com": ("smtp.office365.com", 587),
+    "imap-mail.outlook.com": ("smtp-mail.outlook.com", 587),
+}
+
+
+def _resolver_correo(para):
+    # 'para' puede ser una dirección o el nombre de un contacto (CONTACTOS_CORREO en secretos.py).
+    p = str(para or "").strip()
+    if "@" in p and "." in p:
+        return p
+    agenda = _cfg("CONTACTOS_CORREO", {}) or {}
+    for nombre, direccion in agenda.items():
+        if str(nombre).strip().lower() == p.lower():
+            return direccion
+    return ""
+
+
+def enviar_correo(para, asunto="", mensaje=""):
+    """HERRAMIENTA: ENVÍA un correo (no lo lee). 'para' = dirección de email o nombre de un contacto
+    guardado (CONTACTOS_CORREO en secretos.py). Úsala cuando Marco diga 'mándale un correo a X
+    diciendo...', 'escríbele un email a...'. Requiere el correo configurado en secretos.py."""
+    host = _cfg("CORREO_IMAP")
+    user = _cfg("CORREO_USER")
+    pw = _cfg("CORREO_PASS")
+    if not (host and user and pw):
+        return ("Aún no tengo su correo configurado para enviar, señor. Ponga CORREO_IMAP/USER/PASS "
+                "en secretos.py y podré escribir por usted.")
+    destino = _resolver_correo(para)
+    if not destino:
+        return (f"No tengo el correo de «{para}», señor. Dígame la dirección, o guárdela en "
+                "CONTACTOS_CORREO dentro de secretos.py.")
+    mensaje = str(mensaje or "").strip()
+    if not mensaje:
+        return "¿Qué le escribo en el correo, señor?"
+    asunto = str(asunto or "").strip() or "Mensaje de Marco"
+    smtp_host, puerto = _SMTP_POR_IMAP.get(str(host).lower(), (str(host).replace("imap", "smtp"), 587))
+    try:
+        msg = MIMEText(mensaje, "plain", "utf-8")
+        msg["Subject"] = asunto
+        msg["From"] = user
+        msg["To"] = destino
+        with smtplib.SMTP(smtp_host, puerto, timeout=20) as s:
+            s.starttls()
+            s.login(user, pw)
+            s.sendmail(user, [destino], msg.as_string())
+        return f"Correo enviado a {destino}, señor. Asunto: «{asunto}»."
+    except smtplib.SMTPAuthenticationError:
+        return ("El correo rechazó la clave, señor: revise que CORREO_PASS sea una clave de "
+                "aplicación (no la normal).")
+    except Exception as e:
+        return f"No pude enviar el correo, señor: {e}"
 
 
 # ── CORREO (IMAP) ─────────────────────────────────────────────────────────────

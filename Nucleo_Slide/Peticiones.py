@@ -31,7 +31,8 @@ def _plano(texto):
 _ENCADENABLES = {"instant", "abrir", "musica", "musica_contextual", "control_directo", "estado",
                  "web", "web_youtube", "admin", "clic_pantalla", "arrastrar_pantalla",
                  "cerrar_pestana", "seleccionar_todo", "scroll_pantalla", "ordenar_ventanas",
-                 "enfocar_app", "ventana_ctrl", "atajo_teclado", "escribir_texto"}
+                 "enfocar_app", "ventana_ctrl", "atajo_teclado", "escribir_texto",
+                 "extraer_texto", "abrir_reciente", "grabar_pantalla"}
 # Conectores que separan varias órdenes en una misma frase.
 _SEP_ORDENES = re.compile(r"\s*(?:,|;|\s+y luego\s+|\s+luego\s+|\s+despues\s+|\s+y despues\s+|"
                           r"\s+tambien\s+|\s+y tambien\s+|\s+y\s+)\s*", re.IGNORECASE)
@@ -263,6 +264,17 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
     if modo_control and len(p) >= 3:
         return ("control_directo", original)
 
+    # ABRIR LO ÚLTIMO (descarga / documento / captura) — ANTES del "abre X" genérico, que si no
+    # lo intercepta ("abre lo ultimo..." intentaría abrir una app llamada así).
+    if any(k in p for k in ("lo ultimo que descargue", "mi ultima descarga", "lo que acabo de bajar",
+                            "lo que descargue", "la ultima descarga")):
+        return ("abrir_reciente", "descarga")
+    if any(k in p for k in ("mi ultimo documento", "el ultimo documento", "mi ultimo archivo",
+                            "el ultimo archivo que")):
+        return ("abrir_reciente", "documento")
+    if any(k in p for k in ("mi ultima captura", "la ultima captura", "mi ultima foto")):
+        return ("abrir_reciente", "captura")
+
     if p.startswith("abre "):
         app = original[5:].strip(" .")
         # Solo apps de nombre corto; "abre chrome y busca gatos" es una orden compuesta -> cerebro.
@@ -300,6 +312,26 @@ def decidir_atajo(texto, llamada_activa=False, hay_error_codigo=False, modo_cont
     mesc = re.search(r"^(?:escribe|dicta|teclea)(?:\s*:\s*|\s+)(.+)$", p)
     if mesc and mesc.group(1).strip():
         return ("escribir_texto", mesc.group(1).strip())
+
+    # LEER EN VOZ ALTA lo que hay en PANTALLA (OCR + TTS, interrumpible). Lo COPIADO ya lo lee la
+    # función de portapapeles (admin), así que aquí solo la pantalla — la capacidad genuinamente nueva.
+    if any(k in p for k in ("leeme la pantalla", "lee la pantalla", "leeme esto", "lee esto",
+                            "leeme el texto", "leeme el documento", "leemelo", "leeme el articulo",
+                            "leeme la pagina")):
+        return ("leer_voz", "pantalla")
+
+    # EXTRAER TEXTO (OCR) de la pantalla/imagen al portapapeles.
+    if any(k in p for k in ("extrae el texto", "extraer el texto", "pasa a texto", "pasame esto a texto",
+                            "copia el texto de la imagen", "copia el texto de la pantalla",
+                            "pasa a texto lo que", "saca el texto")):
+        fuente = "portapapeles" if "copie" in p or "clip" in p else "pantalla"
+        return ("extraer_texto", fuente)
+
+    # GRABAR LA PANTALLA (toggle Win+Alt+R).
+    if any(k in p for k in ("graba la pantalla", "empieza a grabar", "graba lo que hago",
+                            "inicia la grabacion", "para la grabacion", "deten la grabacion",
+                            "para de grabar", "detén la grabacion")):
+        return ("grabar_pantalla", None)
 
     # SOLUCIONADOR VISUAL: "resuelve esto" / "ayúdame con este problema" -> lo resuelve con el experto.
     if any(k in p for k in ("resuelve lo que ves", "resuelve lo que tengo en la camara",
@@ -451,6 +483,15 @@ def _correr_uno(tipo, dato):
         if tipo == "escribir_texto":
             from Funciones_Slide.Sistema.Control_PC import dictar
             return dictar(dato)
+        if tipo == "extraer_texto":
+            from Funciones_Slide.Info.Lector import extraer_texto
+            return extraer_texto(dato)
+        if tipo == "abrir_reciente":
+            from Funciones_Slide.Sistema.Control_PC import abrir_reciente
+            return abrir_reciente(dato)
+        if tipo == "grabar_pantalla":
+            from Funciones_Slide.Sistema.Control_PC import grabar_pantalla
+            return grabar_pantalla()
     except Exception:
         return ""
     return ""
@@ -612,6 +653,22 @@ def Procesar_Peticion(texto, ventana):
         elif tipo == "escribir_texto":
             from Funciones_Slide.Sistema.Control_PC import dictar
             respuesta_slide = dictar(dato)
+        elif tipo == "leer_voz":
+            from Funciones_Slide.Info.Lector import leer_en_voz
+            from Nucleo_Slide.Latido_Trabajo import latido
+            with latido(hablado_del_asistente):   # el OCR puede tardar un poco
+                respuesta_slide = leer_en_voz(dato)   # el texto se lee por el camino normal (interrumpible)
+        elif tipo == "extraer_texto":
+            from Funciones_Slide.Info.Lector import extraer_texto
+            from Nucleo_Slide.Latido_Trabajo import latido
+            with latido(hablado_del_asistente):
+                respuesta_slide = extraer_texto(dato)
+        elif tipo == "abrir_reciente":
+            from Funciones_Slide.Sistema.Control_PC import abrir_reciente
+            respuesta_slide = abrir_reciente(dato)
+        elif tipo == "grabar_pantalla":
+            from Funciones_Slide.Sistema.Control_PC import grabar_pantalla
+            respuesta_slide = grabar_pantalla()
         elif tipo == "contestar":
             respuesta_slide = contestar_llamada(mensaje_de_orden(dato))
         elif tipo == "estado":
