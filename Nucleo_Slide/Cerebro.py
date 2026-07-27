@@ -433,7 +433,7 @@ def _confirmacion():
 # necesitan y una frase extra ahí sería estorbo.
 _TOOLS_LENTAS = {
     "buscar_en_internet", "investigar", "consultar_experto", "analizar",
-    "resumir", "proyecto", "redactar_documento", "resolver_visual",
+    "resumir", "proyecto", "redactar_documento", "resolver_visual", "navegar_web",
     "ejecutar_mision", "noticias_del_dia", "recordar_a_fondo", "Auto_Modificacion",
 }
 _MURMULLOS = (

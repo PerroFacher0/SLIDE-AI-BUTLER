@@ -22,6 +22,7 @@ from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy, enviar_corre
 from Funciones_Slide.Sistema.Sesion import restaurar_sesion
 from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
 from Funciones_Slide.Info.Web import abrir_web
+from Funciones_Slide.Sistema.Navegador_Web import navegar_web
 from Funciones_Slide.Sistema.Windows_Admin import matar_proceso, volumen_exacto, brillo_exacto
 from Funciones_Slide.Info.Redactor import redactar_documento
 from Funciones_Slide.Info.Estudio import resolver_visual
@@ -866,6 +867,20 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "navegar_web",
+            "description": "LA LLAVE MAESTRA DE INTERNET: abre un navegador REAL (con sesión persistente, como si Marco lo usara él mismo) y lo opera SOLO para cumplir un objetivo completo de navegación: comprar, buscar y comparar productos, rellenar formularios, leer y resumir una página larga, iniciar sesión en un sitio, etc. Cierra pop-ups/cookies sola, hace clic y escribe por descripción (funciona aunque la página cambie de diseño), y puede scrollear y resumir contenido largo. NUNCA confirma un pago/pedido final sin que Marco lo autorice explícitamente por voz. Úsala para CUALQUIER tarea de navegación con varios pasos ('entra a X, busca Y, resúmeme las mejores opciones'); para solo ABRIR una página sin interactuar, usa abrir_web (más rápido).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "objetivo": {"type": "string", "description": "El objetivo completo de navegación, en lenguaje natural y con todo el detalle que Marco haya dado (ej. 'entra a Temu, busca teclados mecánicos baratos, resume las 3 mejores opciones')."}
+                },
+                "required": ["objetivo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "enviar_correo",
             "description": "ENVÍA un correo electrónico por Marco (distinto de revisar_correo, que solo LEE). Úsala cuando diga 'mándale un correo a X diciendo...', 'escríbele un email a...', 'envíale un correo a mi profesor...'. TÚ redactas un asunto adecuado y el mensaje. 'para' es la dirección de email o el nombre de un contacto guardado.",
             "parameters": {
@@ -1001,6 +1016,7 @@ tools_map = {
     "revisar_correo": revisar_correo,
     "agenda_hoy": agenda_hoy,
     "enviar_correo": enviar_correo,
+    "navegar_web": navegar_web,
     "restaurar_sesion": restaurar_sesion,
     "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
     "abrir_web": abrir_web,

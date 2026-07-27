@@ -169,3 +169,5 @@ platformdirs==4.10.0
 pytz==2026.2
 websockets==16.0
 python-docx
+playwright
+keyring

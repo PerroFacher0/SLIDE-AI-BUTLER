@@ -35,6 +35,7 @@ _PROHIBIDAS = {
     "proyecto", "pedir_a_claude_code", "dictar", "control_ventana",
     "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "ejecutar_mision", "investigar",
     "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
+    "navegar_web",      # navegar/comprar/formularios: NUNCA sin que Marco lo pida explícitamente
 }
 
 _tools_cache = None
