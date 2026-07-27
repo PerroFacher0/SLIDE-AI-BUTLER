@@ -37,6 +37,7 @@ _PROHIBIDAS = {
     "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
     "navegar_web",      # navegar/comprar/formularios: NUNCA sin que Marco lo pida explícitamente
     "que_esta_sonando", # escucha audio del sistema (puede ser privado): solo si Marco lo pide
+    "gestionar_archivos", # mueve/copia archivos: cambia el sistema, solo si Marco lo pide
 }
 
 _tools_cache = None
