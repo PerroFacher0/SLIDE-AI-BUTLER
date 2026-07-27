@@ -23,6 +23,7 @@ from Funciones_Slide.Sistema.Sesion import restaurar_sesion
 from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
 from Funciones_Slide.Info.Web import abrir_web
 from Funciones_Slide.Sistema.Navegador_Web import navegar_web
+from Funciones_Slide.Sistema.Escucha_Sistema import que_esta_sonando
 from Funciones_Slide.Sistema.Windows_Admin import matar_proceso, volumen_exacto, brillo_exacto
 from Funciones_Slide.Info.Redactor import redactar_documento
 from Funciones_Slide.Info.Estudio import resolver_visual
@@ -881,6 +882,20 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "que_esta_sonando",
+            "description": "Escucha lo que SUENA en la PC ahora mismo (un video, una llamada, un aviso de Windows -- NO el micrófono de Marco) y te dice qué se está diciendo o reproduciendo. Úsala para 'qué está sonando', 'qué dice ese video', 'sonó algo ahorita', 'de qué está hablando ese video de YouTube'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segundos": {"type": "number", "description": "Cuántos segundos grabar (2 a 30). Por defecto 6."}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "enviar_correo",
             "description": "ENVÍA un correo electrónico por Marco (distinto de revisar_correo, que solo LEE). Úsala cuando diga 'mándale un correo a X diciendo...', 'escríbele un email a...', 'envíale un correo a mi profesor...'. TÚ redactas un asunto adecuado y el mensaje. 'para' es la dirección de email o el nombre de un contacto guardado.",
             "parameters": {
@@ -1017,6 +1032,7 @@ tools_map = {
     "agenda_hoy": agenda_hoy,
     "enviar_correo": enviar_correo,
     "navegar_web": navegar_web,
+    "que_esta_sonando": que_esta_sonando,
     "restaurar_sesion": restaurar_sesion,
     "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
     "abrir_web": abrir_web,

@@ -171,3 +171,4 @@ websockets==16.0
 python-docx
 playwright
 keyring
+pyaudiowpatch

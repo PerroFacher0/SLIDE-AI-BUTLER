@@ -54,10 +54,23 @@ def _asegurar_navegador():
         _pw = sync_playwright().start()
         # Perfil PERSISTENTE: las cookies/logins de Marco sobreviven entre sesiones. VISIBLE
         # (headless=False) — el principio de todo AIDEN: si actúa, Marco lo VE.
-        _contexto = _pw.chromium.launch_persistent_context(
-            _PERFIL, headless=False, viewport={"width": 1280, "height": 800},
-            args=["--start-maximized"],
-        )
+        #
+        # channel="chrome": usa el Chrome REAL instalado (el mismo binario que Marco ya usa a
+        # diario), NO el Chromium suelto que trae Playwright. Un sitio que huella el navegador
+        # (Cloudflare, Datadome) ve un Chrome genuino con su firma real — no estamos disfrazando
+        # nada, LO ES. Deliberadamente NO se usa playwright-stealth (parchar el fingerprint para
+        # simular ser humano): eso sí es evasión activa de un sistema de seguridad. Si Chrome no
+        # está instalado, cae al Chromium de Playwright para no dejar a Marco sin navegador.
+        try:
+            _contexto = _pw.chromium.launch_persistent_context(
+                _PERFIL, headless=False, viewport={"width": 1280, "height": 800},
+                args=["--start-maximized"], channel="chrome",
+            )
+        except Exception:
+            _contexto = _pw.chromium.launch_persistent_context(
+                _PERFIL, headless=False, viewport={"width": 1280, "height": 800},
+                args=["--start-maximized"],
+            )
         _page = _contexto.pages[0] if _contexto.pages else _contexto.new_page()
         return _page
 
@@ -218,6 +231,13 @@ def _localizar_visual(page, descripcion):
         # Página razonable -> foto completa; página absurdamente larga (feed infinito) -> solo
         # el viewport actual, para no mandar una imagen gigante al modelo.
         usar_full_page = alto_pagina <= 15000
+        if usar_full_page:
+            # Siempre arrancar la captura completa desde scroll 0: un scroll "colgado" de una
+            # acción anterior (quedó a mitad, ej. scrollY=9) descuadra el recorte/costurado
+            # interno que hace Playwright para armar la foto de toda la página, y eso confunde
+            # la detección (visto en pruebas reales: mismo elemento, mismo prompt, falla SOLO
+            # cuando el scroll de partida no era 0).
+            page.evaluate("window.scrollTo(0, 0)")
         png = page.screenshot(full_page=usar_full_page)
         img = Image.open(io.BytesIO(png))
         xy = localizar_en_imagen(img, descripcion)
@@ -225,13 +245,24 @@ def _localizar_visual(page, descripcion):
             return None
         if not usar_full_page:
             return xy   # ya era del viewport: coordenadas directamente utilizables
-        # Coordenada en la foto COMPLETA -> hay que centrar la vista ahí y re-mirar el viewport.
+        # Coordenada en la foto COMPLETA -> hay que centrar la vista ahí y re-mirar el viewport
+        # para una coordenada más precisa. Si ese segundo repaso falla (el elemento queda pegado
+        # al borde del recorte, o la página ya cabía entera y no hubo scroll real posible), NO se
+        # tira el resultado: cae a la coordenada de la foto completa, traducida al scroll ACTUAL
+        # (una coordenada aproximada es mejor que ninguna).
         destino_scroll = max(0, xy[1] - alto_viewport // 2)
         page.evaluate(f"window.scrollTo(0, {destino_scroll})")
         page.wait_for_timeout(250)
+        scroll_real = page.evaluate("() => window.scrollY") or 0
         png_viewport = page.screenshot()
         img_viewport = Image.open(io.BytesIO(png_viewport))
-        return localizar_en_imagen(img_viewport, descripcion)
+        xy_preciso = localizar_en_imagen(img_viewport, descripcion)
+        if xy_preciso is not None:
+            return xy_preciso
+        y_relativo = xy[1] - scroll_real
+        if 0 <= y_relativo <= alto_viewport:
+            return (xy[0], y_relativo)
+        return None
     except Exception:
         return None
 
@@ -287,6 +318,94 @@ def escribir_en(campo, texto):
     return f"No encontré el campo «{campo}», señor."
 
 
+def mantener_cursor_en(descripcion):
+    """HERRAMIENTA: deja el cursor QUIETO sobre 'descripcion' (hover) sin hacer clic — para que
+    aparezca un submenú o tooltip que dependa de eso, antes del siguiente clic."""
+    page = _asegurar_navegador()
+    loc = _localizar_semantico(page, descripcion)
+    if loc is not None:
+        try:
+            loc.scroll_into_view_if_needed(timeout=TIMEOUT_ACCION)
+            loc.hover(timeout=TIMEOUT_ACCION)
+            return f"Dejé el cursor sobre «{descripcion}», señor."
+        except Exception:
+            pass
+    xy = _localizar_visual(page, descripcion)
+    if xy:
+        try:
+            page.mouse.move(*xy)
+            return f"Dejé el cursor sobre «{descripcion}», señor (lo ubiqué viendo la página)."
+        except Exception as e:
+            return f"Lo vi pero no pude dejar el cursor ahí, señor: {e}"
+    return f"No encontré «{descripcion}» en la página, señor."
+
+
+def arrastrar_de_a(origen, destino):
+    """HERRAMIENTA: arrastra el elemento 'origen' y lo suelta sobre 'destino' (tableros tipo
+    Trello, reordenar listas, sliders)."""
+    page = _asegurar_navegador()
+    loc_o = _localizar_semantico(page, origen)
+    loc_d = _localizar_semantico(page, destino)
+    if loc_o is not None and loc_d is not None:
+        try:
+            loc_o.scroll_into_view_if_needed(timeout=TIMEOUT_ACCION)
+            loc_o.drag_to(loc_d, timeout=TIMEOUT_ACCION)
+            return f"Arrastré «{origen}» hasta «{destino}», señor."
+        except Exception:
+            pass
+    # Dos blancos visuales en la MISMA jugada (origen Y destino) componen el riesgo de que uno
+    # falle: un segundo intento completo, barato, sube bastante la fiabilidad real.
+    xy_o = _localizar_visual(page, origen) or _localizar_visual(page, origen)
+    xy_d = _localizar_visual(page, destino) or _localizar_visual(page, destino)
+    if xy_o and xy_d:
+        try:
+            page.mouse.move(*xy_o)
+            page.mouse.down()
+            pasos = 8   # varios pasos intermedios: algunos sitios solo detectan el drag si el
+            for i in range(1, pasos + 1):   # mouse se movió de a poco, no si "saltó" directo.
+                x = xy_o[0] + (xy_d[0] - xy_o[0]) * i / pasos
+                y = xy_o[1] + (xy_d[1] - xy_o[1]) * i / pasos
+                page.mouse.move(x, y)
+                page.wait_for_timeout(30)
+            page.mouse.up()
+            return f"Arrastré «{origen}» hasta «{destino}», señor (lo ubiqué viendo la página)."
+        except Exception as e:
+            return f"Lo vi pero no pude arrastrarlo, señor: {e}"
+    return f"No encontré «{origen}» o «{destino}» para arrastrar, señor."
+
+
+# ── Scratchpad de sesión (memoria entre pestañas/sitios) ───────────────────────
+# Sin esto, al saltar de un sitio a otro (p.ej. "compara Temu con Amazon") el LLM olvida los
+# precios/datos exactos que vio en el primero. Notas cortas, con vencimiento (no se acarrea
+# contexto viejo de tareas de hace horas), inyectadas en el prompt de CADA navegar_web nuevo.
+_notas_sesion = []            # [(timestamp, texto), ...]
+_NOTAS_VENCEN_SEG = 30 * 60    # 30 min de inactividad -> se consideran obsoletas
+
+
+def anotar_nota(texto):
+    """HERRAMIENTA: anota un dato clave (precio, nombre, lo que sea) para recordarlo en el resto
+    de la tarea, incluso si después navegas a OTRO sitio. Úsala ANTES de cambiar de sitio si el
+    objetivo implica comparar cosas entre varias páginas."""
+    texto = str(texto or "").strip()
+    if not texto:
+        return "¿Qué anoto, señor?"
+    _notas_sesion.append((time.time(), texto))
+    del _notas_sesion[:-20]
+    return f"Anotado: {texto}"
+
+
+def _notas_vigentes():
+    ahora = time.time()
+    return [t for (ts, t) in _notas_sesion if ahora - ts <= _NOTAS_VENCEN_SEG]
+
+
+def limpiar_notas_sesion():
+    """HERRAMIENTA: borra las notas acumuladas de sesión (para empezar una tarea nueva sin
+    arrastrar contexto de la anterior)."""
+    _notas_sesion.clear()
+    return "Notas limpias, señor."
+
+
 def ir_a(destino):
     """HERRAMIENTA: navega a una URL, o si no parece una URL, lo busca en Google."""
     page = _asegurar_navegador()
@@ -303,6 +422,10 @@ def ir_a(destino):
     try:
         page.goto(url, timeout=20000, wait_until="domcontentloaded")
         page.wait_for_timeout(600)
+        if _hay_reto_seguridad(page):
+            return (f"Llegué a {page.title() or d}, señor, pero hay un reto de verificación humana "
+                    "(CAPTCHA/Cloudflare) bloqueando el paso. Me detengo aquí: resuélvalo usted en "
+                    "la ventana del navegador y avíseme cuando siga.")
         cerrar_popups()
         return f"Estoy en {page.title() or d}, señor."
     except Exception as e:
@@ -315,14 +438,34 @@ _PATRON_PAGO = re.compile(
     r"finalizar compra|complete purchase|checkout", re.I,
 )
 
+# Retos de verificación humana (Cloudflare Turnstile, Datadome, reCAPTCHA interactivo...): esto
+# NO se intenta resolver ni rodear NUNCA — el sitio está pidiendo verificar que hay un humano, y
+# lo correcto es que Marco lo resuelva él mismo en la ventana visible del navegador (igual que
+# haría si estuviera navegando a mano). El mini-agente se detiene y avisa, punto.
+_PATRON_RETO = re.compile(
+    r"verifying you are human|verificando que eres humano|just a moment|checking your browser|"
+    r"attention required.*cloudflare|cf-browser-verification|datadome|"
+    r"please verify you are a human|unusual traffic|solve the challenge|security check|"
+    r"confirma que no eres un robot|no soy un robot", re.I,
+)
+
 
 def _es_boton_de_pago(descripcion):
     return bool(_PATRON_PAGO.search(str(descripcion or "")))
 
 
+def _hay_reto_seguridad(page):
+    try:
+        titulo = page.title() or ""
+        texto = (page.evaluate("() => document.body.innerText") or "")[:2000]
+    except Exception:
+        return False
+    return bool(_PATRON_RETO.search(titulo) or _PATRON_RETO.search(texto))
+
+
 def estado_pagina():
-    """HERRAMIENTA: dice si la página terminó de cargar y si PARECE una pantalla de pago/checkout
-    final (para que ni tú ni el LLM confirmen un pago sin querer)."""
+    """HERRAMIENTA: dice si la página terminó de cargar, si PARECE una pantalla de pago/checkout
+    final, y si hay un reto de verificación humana (CAPTCHA/Cloudflare/Datadome) bloqueando el paso."""
     page = _asegurar_navegador()
     cargando = True
     try:
@@ -336,7 +479,10 @@ def estado_pagina():
     except Exception:
         pass
     es_pago = bool(_PATRON_PAGO.search(texto)) and ("$" in texto or "total" in texto.lower())
-    return {"cargando": cargando, "es_pago_final": es_pago, "titulo": _titulo_seguro(page)}
+    return {
+        "cargando": cargando, "es_pago_final": es_pago,
+        "es_reto_seguridad": _hay_reto_seguridad(page), "titulo": _titulo_seguro(page),
+    }
 
 
 def _titulo_seguro(page):
@@ -404,21 +550,38 @@ _HERRAMIENTAS_WEB = [
      "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {"name": "explorar_y_resumir", "description": "Scrollea la página sola y resume/responde una consulta con lo que ve.",
      "parameters": {"type": "object", "properties": {"consulta": {"type": "string"}}, "required": ["consulta"]}}},
+    {"type": "function", "function": {"name": "mantener_cursor_en", "description": "Deja el cursor quieto sobre un elemento (hover) para revelar un submenú/tooltip, sin hacer clic.",
+     "parameters": {"type": "object", "properties": {"descripcion": {"type": "string"}}, "required": ["descripcion"]}}},
+    {"type": "function", "function": {"name": "arrastrar_de_a", "description": "Arrastra un elemento y lo suelta sobre otro (tableros, reordenar, sliders).",
+     "parameters": {"type": "object", "properties": {"origen": {"type": "string"}, "destino": {"type": "string"}}, "required": ["origen", "destino"]}}},
+    {"type": "function", "function": {"name": "anotar_nota", "description": "Anota un dato clave (precio, nombre) para no olvidarlo si luego navegas a otro sitio a comparar.",
+     "parameters": {"type": "object", "properties": {"texto": {"type": "string"}}, "required": ["texto"]}}},
+    {"type": "function", "function": {"name": "estado_pagina", "description": "Dice si la página cargó, si es una pantalla de pago final, y si hay un reto de verificación humana (CAPTCHA/Cloudflare) bloqueando.",
+     "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {"name": "terminar", "description": "Termina la tarea de navegación: da el reporte final para Marco.",
      "parameters": {"type": "object", "properties": {"reporte": {"type": "string"}}, "required": ["reporte"]}}},
 ]
 _FUNCIONES_WEB = {
     "ir_a": ir_a, "clic_en": clic_en, "escribir_en": escribir_en,
     "cerrar_popups": cerrar_popups, "explorar_y_resumir": explorar_y_resumir,
+    "mantener_cursor_en": mantener_cursor_en, "arrastrar_de_a": arrastrar_de_a,
+    "anotar_nota": anotar_nota, "estado_pagina": estado_pagina,
 }
 
 _SISTEMA_WEB = (
     "Eres AIDEN navegando la web por Marco. Cumple su objetivo paso a paso usando SOLO estas "
-    "herramientas de navegador (ir_a, clic_en, escribir_en, cerrar_popups, explorar_y_resumir). "
+    "herramientas de navegador (ir_a, clic_en, escribir_en, cerrar_popups, explorar_y_resumir, "
+    "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina). "
     "Tras cada acción, antes de la siguiente, considera si conviene cerrar_popups. Si un clic dice "
     "que se detuvo por ser un PAGO/pedido final, NO insistas: repórtalo tal cual con 'terminar' — "
-    "jamás intentes rodear ese freno. Cuando termines (o si algo no se puede), llama a 'terminar' "
-    "con un reporte breve y claro para decirle a Marco por voz. Máximo unos pocos pasos; sé directo."
+    "jamás intentes rodear ese freno. Si ir_a o estado_pagina reportan un RETO DE SEGURIDAD "
+    "(CAPTCHA/Cloudflare/Datadome), tampoco insistas ni intentes resolverlo: termina de inmediato "
+    "explicando que Marco debe resolverlo él mismo en la ventana visible del navegador. Si un menú "
+    "solo aparece al pasar el mouse, usa mantener_cursor_en antes de clic_en. Si el objetivo implica "
+    "COMPARAR varios sitios (p.ej. 'compara Temu con Amazon'), usa anotar_nota para guardar los "
+    "datos clave de un sitio ANTES de saltar al siguiente. Cuando termines (o si algo no se puede), "
+    "llama a 'terminar' con un reporte breve y claro para decirle a Marco por voz. Máximo unos pocos "
+    "pasos; sé directo."
 )
 
 
@@ -441,7 +604,12 @@ def navegar_web(objetivo):
     except Exception:
         _hablar = lambda t: None
 
-    mensajes = [{"role": "system", "content": _SISTEMA_WEB},
+    notas = _notas_vigentes()
+    sistema = _SISTEMA_WEB
+    if notas:
+        sistema += ("\n\nNOTAS DE ESTA SESIÓN (de sitios/pasos anteriores; úsalas si el objetivo "
+                    "actual las necesita, p.ej. para comparar):\n- " + "\n- ".join(notas))
+    mensajes = [{"role": "system", "content": sistema},
                 {"role": "user", "content": "OBJETIVO: " + objetivo}]
     reporte = ""
     with latido(_hablar):

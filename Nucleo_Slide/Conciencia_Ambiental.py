@@ -36,6 +36,7 @@ _PROHIBIDAS = {
     "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "ejecutar_mision", "investigar",
     "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
     "navegar_web",      # navegar/comprar/formularios: NUNCA sin que Marco lo pida explícitamente
+    "que_esta_sonando", # escucha audio del sistema (puede ser privado): solo si Marco lo pide
 }
 
 _tools_cache = None

@@ -435,6 +435,7 @@ _TOOLS_LENTAS = {
     "buscar_en_internet", "investigar", "consultar_experto", "analizar",
     "resumir", "proyecto", "redactar_documento", "resolver_visual", "navegar_web",
     "ejecutar_mision", "noticias_del_dia", "recordar_a_fondo", "Auto_Modificacion",
+    "que_esta_sonando",
 }
 _MURMULLOS = (
     "Un momento, señor.", "Enseguida se lo tengo.", "Déjeme ver...", "Voy con ello, señor.",
