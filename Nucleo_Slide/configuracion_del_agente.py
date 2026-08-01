@@ -9,6 +9,7 @@ from Funciones_Slide.Productividad.Notas import notas
 from Funciones_Slide.Comunicacion.Llamadas import contestar_llamada
 from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, ajustar_brillo, buscar_archivo
 from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
+from Nucleo_Slide.Cancelacion import cancelar
 from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
@@ -653,12 +654,12 @@ tools = [
         "type": "function",
         "function": {
             "name": "controlar_pantalla",
-            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, ARRASTRAR una cosa hasta otra, ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
+            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). Funciona en VARIOS MONITORES. USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, IR A UNA PESTANA del navegador por su nombre (accion 'clic' con el nombre de la pestana, ej. objetivo='GitHub'), ARRASTRAR una cosa hasta otra, AJUSTAR un control continuo hasta lograr un resultado (slider de brillo/volumen/recorte: mira, mueve y VUELVE A MIRAR hasta que quede bien), ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ajustar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | arrastrar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
-                    "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: la descripcion de lo que se ve (nombre del boton, o una descripcion visual si no tiene nombre). Para arrastrar: 'X hasta Y'. Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
+                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | arrastrar | ajustar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
+                    "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: la descripcion de lo que se ve (nombre del boton, nombre de la pestana, o una descripcion visual si no tiene nombre). Para arrastrar: 'X hasta Y'. Para ajustar: 'CONTROL hasta META' (ej. 'el slider de brillo hasta la mitad'). Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
                 },
                 "required": ["accion"]
             }
@@ -794,9 +795,25 @@ tools = [
                 "type": "object",
                 "properties": {
                     "comando": {"type": "string", "description": "El comando de PowerShell a ejecutar (válido, completo)."},
-                    "descripcion": {"type": "string", "description": "En una frase, qué logra (para el registro)."}
+                    "descripcion": {"type": "string", "description": "En una frase, qué logra (para el registro)."},
+                    "respuestas": {"type": "string", "description": "Opcional. Qué contestar SI el comando pregunta algo ([Y/n], '¿Desea continuar?'), en orden y separadas por '|' (ej. 'S|Y'). Si lo dejas vacío se responde que SÍ automáticamente. Ya NO hace falta evitar comandos interactivos."},
+                    "timeout": {"type": "integer", "description": "Opcional. Segundos máximos (por defecto 45). Súbelo para instalaciones o descargas largas (ej. 300)."}
                 },
                 "required": ["comando"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancelar",
+            "description": "FRENO DE EMERGENCIA: detiene lo que AIDEN este EJECUTANDO ahora mismo (un comando largo en el PC, una secuencia de clics, un ajuste visual). Usala cuando Marco diga 'para', 'detente', 'cancela', 'ya no', 'olvidalo' MIENTRAS algo esta corriendo. Marco tambien puede pararlo el mismo con Ctrl+Alt+P. NO la uses para cerrar el asistente (eso es Salir) ni para cancelar un recado programado (eso es programar_orden con accion='cancelar').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "motivo": {"type": "string", "description": "Opcional: por que se detiene (para el registro)."}
+                },
+                "required": []
             }
         }
     },
@@ -1038,6 +1055,7 @@ tools_map = {
     "recordar_conversacion": recordar_conversacion,
     "proyecto": proyecto,
     "controlar_pantalla": controlar_pantalla,
+    "cancelar": cancelar,
     "gestionar_metas": gestionar_metas,
     "ejecutar_mision": ejecutar_mision,
     "recordar_a_fondo": recordar_a_fondo,

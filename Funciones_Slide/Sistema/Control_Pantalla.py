@@ -5,13 +5,65 @@
 #     CUALQUIER cosa visible, no solo lo que Windows sabe nombrar — el respaldo por visión tarda
 #     un poco más (una consulta al modelo), pero nada se queda fuera de alcance.
 #   - arrastrar: localiza origen y destino (por nombre o visión) y hace drag real del mouse.
+#   - ajustar: MIRA-MUEVE-REMIRA. Para lo que no se acierta de un solo clic (un slider "hasta que
+#     se vea bien"): arrastra un poco, vuelve a mirar la pantalla y corrige, hasta lograrlo.
 #   - ordenar: acomoda tus ventanas en mosaico (las ves reorganizarse).
 #   - enfocar: trae una app al frente.
 # Una sola herramienta `interactuar_pc(accion, objetivo)` (estilo anti-bloat del proyecto).
+#
+# VARIAS PANTALLAS: todo esto trabaja sobre el ESCRITORIO VIRTUAL (la caja que engloba todos los
+# monitores), no sobre el principal. Dos correcciones que antes rompían el clic en la 2ª pantalla:
+#   1. Se declara el proceso "per-monitor DPI aware" ANTES de tocar nada. Sin esto Windows miente:
+#      con la pantalla al 150% devuelve coordenadas escaladas y el cursor caía desplazado.
+#   2. La captura toma TODOS los monitores (all_screens) y se guarda el ORIGEN del escritorio
+#      virtual, que es NEGATIVO si hay un monitor a la izquierda del principal. Las coordenadas
+#      normalizadas (0-1000) del modelo se convierten contra ese origen, no contra (0,0).
 
 import re
 
 import win32gui
+
+from Nucleo_Slide import Cancelacion
+
+
+# ── DPI: hay que declararlo ANTES de la primera captura o consulta de tamaño ──
+def _hacerse_dpi_aware():
+    import ctypes
+    try:
+        # PER_MONITOR_AWARE_V2 (-4): cada monitor con su propio factor de escala. Windows 10 1703+.
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)   # PER_MONITOR_AWARE
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()        # respaldo antiguo (system-aware)
+    except Exception:
+        pass
+
+
+_hacerse_dpi_aware()
+
+
+def _escritorio_virtual():
+    """(x, y, ancho, alto) de la caja que engloba TODOS los monitores. El origen puede ser
+    negativo si hay una pantalla a la izquierda o encima de la principal."""
+    try:
+        import win32api
+        return (win32api.GetSystemMetrics(76),    # SM_XVIRTUALSCREEN
+                win32api.GetSystemMetrics(77),    # SM_YVIRTUALSCREEN
+                win32api.GetSystemMetrics(78),    # SM_CXVIRTUALSCREEN
+                win32api.GetSystemMetrics(79))    # SM_CYVIRTUALSCREEN
+    except Exception:
+        try:
+            import win32api
+            return (0, 0, win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1))
+        except Exception:
+            return (0, 0, 1920, 1080)
 
 try:
     import pyautogui
@@ -67,24 +119,28 @@ def _ubicar_por_nombre(objetivo_n):
 
 # ── Localización por VISIÓN — respaldo universal (cuando no hay nombre) ──────
 def _capturar_pantalla():
+    """Captura TODOS los monitores. Devuelve (imagen, (ancho, alto), (origen_x, origen_y)) —
+    el origen es la esquina del escritorio virtual, que se suma luego para obtener coordenadas
+    de pantalla reales."""
+    ox, oy, _vw, _vh = _escritorio_virtual()
     try:
         from PIL import ImageGrab
-        img = ImageGrab.grab()
-        return img, img.size
+        try:
+            img = ImageGrab.grab(all_screens=True)     # Pillow >= 6 en Windows
+        except TypeError:
+            img = ImageGrab.grab()                      # Pillow viejo: solo el principal
+            ox = oy = 0
+        return img, img.size, (ox, oy)
     except Exception:
-        return None, None
+        return None, None, (0, 0)
 
 
-def _localizar_en_pantalla(descripcion):
-    """Mira la pantalla ACTUAL y devuelve (x, y) en píxeles reales de pantalla para 'descripcion',
-    o None si no lo ve. Es el respaldo cuando la estructura de accesibilidad no tiene ese nombre
-    (juegos, lienzos, iconos sin texto...). Cuesta una consulta al modelo (no es instantáneo).
-    Usa el formato "box_2d" que Gemini tiene ENTRENADO para detección espacial — pedirle 'dame las
-    coordenadas X,Y' a secas es MUCHO menos fiable (probado: fallaba incluso con objetivos obvios;
-    con este formato oficial acierta)."""
-    img, size = _capturar_pantalla()
+def _consultar_vista(prompt, max_tokens=150):
+    """Captura TODOS los monitores y le hace UNA pregunta al modelo sobre lo que se ve.
+    Devuelve (texto, (ancho, alto), (origen_x, origen_y)) o (None, None, None)."""
+    img, size, origen = _capturar_pantalla()
     if img is None:
-        return None
+        return None, None, None
     try:
         import io
         import base64
@@ -92,26 +148,48 @@ def _localizar_en_pantalla(descripcion):
         img.save(buf, format="JPEG", quality=85)
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception:
-        return None
+        return None, None, None
     try:
         from openai import OpenAI
         from secretos import OPENROUTER_API_KEY
         cliente = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
-        prompt = (
-            "Detect exactly this on the screen: '" + str(descripcion) + "'. Output ONLY a JSON list "
-            'with one entry: {"box_2d": [ymin,xmin,ymax,xmax], "label": "..."}, coordinates '
-            "normalized 0-1000. If it is not visible, output exactly: []"
-        )
         r = cliente.chat.completions.create(
             model="google/gemini-2.5-flash",
             messages=[{"role": "user", "content": [
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
             ]}],
-            max_tokens=150, temperature=0,
+            max_tokens=max_tokens, temperature=0,
         )
-        salida = (r.choices[0].message.content or "").strip()
+        return (r.choices[0].message.content or "").strip(), size, origen
     except Exception:
+        return None, None, None
+
+
+def _a_pixeles(caja_norm, size, origen):
+    """[ymin,xmin,ymax,xmax] normalizado 0-1000 -> (x1, y1, x2, y2) en pantalla real."""
+    ymin, xmin, ymax, xmax = caja_norm
+    w, h = size
+    ox, oy = origen
+    return (round(ox + xmin / 1000 * w), round(oy + ymin / 1000 * h),
+            round(ox + xmax / 1000 * w), round(oy + ymax / 1000 * h))
+
+
+def _detectar_caja(descripcion):
+    """Mira la pantalla ACTUAL y devuelve la CAJA (x1, y1, x2, y2) en píxeles reales de pantalla
+    donde está 'descripcion', o None si no la ve. Es el respaldo cuando la estructura de
+    accesibilidad no tiene ese nombre (juegos, lienzos, iconos sin texto...). Cuesta una consulta
+    al modelo (no es instantáneo).
+    Usa el formato "box_2d" que Gemini tiene ENTRENADO para detección espacial — pedirle 'dame las
+    coordenadas X,Y' a secas es MUCHO menos fiable (probado: fallaba incluso con objetivos obvios;
+    con este formato oficial acierta)."""
+    prompt = (
+        "Detect exactly this on the screen: '" + str(descripcion) + "'. Output ONLY a JSON list "
+        'with one entry: {"box_2d": [ymin,xmin,ymax,xmax], "label": "..."}, coordinates '
+        "normalized 0-1000. If it is not visible, output exactly: []"
+    )
+    salida, size, origen = _consultar_vista(prompt)
+    if salida is None:
         return None
     m = re.search(r"\[\s*\{.*?\}\s*\]", salida, re.DOTALL)
     if not m:
@@ -121,14 +199,23 @@ def _localizar_en_pantalla(descripcion):
         datos = json.loads(m.group(0))
         if not datos:
             return None
-        ymin, xmin, ymax, xmax = datos[0]["box_2d"]
+        caja = datos[0]["box_2d"]
     except Exception:
         return None
-    w, h = size
-    cx = (xmin + xmax) / 2 / 1000 * w
-    cy = (ymin + ymax) / 2 / 1000 * h
-    x = max(0, min(w - 1, round(cx)))
-    y = max(0, min(h - 1, round(cy)))
+    # Normalizadas (0-1000) -> píxeles de la CAPTURA -> + origen del escritorio virtual.
+    # Ese origen es lo que hace que el clic caiga bien en un monitor a la izquierda (x negativa).
+    return _a_pixeles(caja, size, origen)
+
+
+def _localizar_en_pantalla(descripcion):
+    """El CENTRO de lo que se ve, en coordenadas reales de pantalla, o None."""
+    caja = _detectar_caja(descripcion)
+    if caja is None:
+        return None
+    x1, y1, x2, y2 = caja
+    ox, oy, vw, vh = _escritorio_virtual()
+    x = max(ox, min(ox + vw - 1, round((x1 + x2) / 2)))
+    y = max(oy, min(oy + vh - 1, round((y1 + y2) / 2)))
     return (x, y)
 
 
@@ -202,6 +289,97 @@ def _arrastrar(descripcion):
         return f"No pude arrastrar, señor: {e}"
 
 
+_MAX_PASOS_AJUSTE = 5      # tope de iteraciones mirar-mover-remirar
+_CERCA = 5                 # px: más cerca que esto del destino, se da por logrado
+
+
+def _ajustar_visual(descripcion):
+    """MIRAR-MOVER-REMIRAR: para lo que NO se acierta de un solo tirón.
+
+    Un clic o un arrastre normal son "a ciegas": se mira una vez, se calcula un punto y se suelta.
+    Eso falla con controles CONTINUOS (el slider del brillo, el volumen, un recorte, una barra de
+    progreso) porque el punto exacto depende del resultado, no de la posición. Aquí AIDEN hace lo
+    que haría Marco: mueve un poco, VUELVE A MIRAR, corrige, y repite hasta lograrlo o rendirse.
+
+    Se usa como: ajustar('el slider de brillo hasta la mitad')."""
+    texto = str(descripcion or "").strip()
+    if not texto:
+        return "¿Qué quiere que ajuste, señor? (ej. 'el brillo hasta la mitad')"
+    if pyautogui is None:
+        return "No tengo control de mouse disponible, señor."
+
+    partes = re.split(r"\s+hasta\s+|\s+a\s+que\s+|\s+para\s+que\s+", texto, maxsplit=1)
+    control_txt = partes[0].strip()
+    meta_txt = partes[1].strip() if len(partes) == 2 else texto
+
+    prompt = (
+        "You are helping adjust a control on a Windows screen.\n"
+        f"CONTROL to adjust: '{control_txt}'\n"
+        f"GOAL: '{meta_txt}'\n"
+        "Look at the screenshot and answer ONLY with one JSON object:\n"
+        '{"listo": true|false, "control": [ymin,xmin,ymax,xmax], '
+        '"destino": [ymin,xmin,ymax,xmax], "nota": "<short note in Spanish>"}\n'
+        '- "listo": true if the GOAL is ALREADY satisfied in this screenshot.\n'
+        '- "control": box of the draggable handle/knob/thumb as it is RIGHT NOW.\n'
+        '- "destino": box of where that handle must END UP to satisfy the goal '
+        '(repeat "control" if listo is true).\n'
+        "- coordinates normalized 0-1000.\n"
+        'If you cannot see the control, answer exactly: {"listo": false, "nota": "no visible"}'
+    )
+
+    import json
+    import time
+    ultima_nota = ""
+    for paso in range(_MAX_PASOS_AJUSTE):
+        Cancelacion.revisar()
+        salida, size, origen = _consultar_vista(prompt, max_tokens=250)
+        if salida is None:
+            return "No pude ver la pantalla para ajustar, señor."
+        m = re.search(r"\{.*\}", salida, re.DOTALL)
+        if not m:
+            return "No entendí lo que veo en pantalla, señor."
+        try:
+            d = json.loads(m.group(0))
+        except Exception:
+            return "No entendí lo que veo en pantalla, señor."
+
+        ultima_nota = str(d.get("nota") or "").strip()
+        if d.get("listo"):
+            hechos = f" (me tomó {paso} ajuste{'s' if paso != 1 else ''})" if paso else ""
+            return f"Listo, señor: {meta_txt}.{hechos}"
+        if not d.get("control") or not d.get("destino"):
+            return f"No encontré «{control_txt}» en pantalla, señor." + (
+                f" ({ultima_nota})" if ultima_nota else "")
+
+        try:
+            cx1, cy1, cx2, cy2 = _a_pixeles(d["control"], size, origen)
+            dx1, dy1, dx2, dy2 = _a_pixeles(d["destino"], size, origen)
+        except Exception:
+            return "Las coordenadas que vi no tenían sentido, señor."
+        ox_, oy_ = (cx1 + cx2) // 2, (cy1 + cy2) // 2
+        dx_, dy_ = (dx1 + dx2) // 2, (dy1 + dy2) // 2
+
+        if abs(dx_ - ox_) <= _CERCA and abs(dy_ - oy_) <= _CERCA:
+            return f"Listo, señor: {meta_txt}."      # ya está donde debe
+
+        try:
+            pyautogui.moveTo(ox_, oy_, duration=0.3)
+            pyautogui.mouseDown()
+            pyautogui.moveTo(dx_, dy_, duration=0.5)   # movimiento VISIBLE
+            pyautogui.mouseUp()
+        except Exception as e:
+            try:
+                pyautogui.mouseUp()
+            except Exception:
+                pass
+            return f"No pude mover el control, señor: {e}"
+        time.sleep(0.45)     # deja que la pantalla refleje el cambio antes de volver a mirar
+
+    cola = f" Lo último que vi: {ultima_nota}." if ultima_nota else ""
+    return (f"Lo intenté {_MAX_PASOS_AJUSTE} veces y no logré «{meta_txt}», señor.{cola} "
+            "Dígame el valor exacto y lo pongo directo.")
+
+
 def _ventanas_ordenables():
     # Top-level visibles, con título, no minimizadas, que son ventanas de app (no herramientas).
     res = []
@@ -224,25 +402,37 @@ def _ventanas_ordenables():
     return res[:4]   # ordenamos hasta 4 (mosaico cómodo)
 
 
-def _ordenar_ventanas():
+def _area_trabajo():
+    """Zona útil (sin barra de tareas) del monitor donde está la ventana activa. Con dos pantallas
+    el mosaico se arma en LA QUE MARCO ESTÁ USANDO, no siempre en la principal."""
     try:
         import win32api
-        ancho = win32api.GetSystemMetrics(0)
-        alto = win32api.GetSystemMetrics(1) - 48          # deja la barra de tareas
+        hmon = win32api.MonitorFromWindow(win32gui.GetForegroundWindow(), 2)  # NEAREST
+        izq, arr, der, aba = win32api.GetMonitorInfo(hmon)["Work"]
+        return izq, arr, der - izq, aba - arr
     except Exception:
-        ancho, alto = 1920, 1032
+        try:
+            import win32api
+            return 0, 0, win32api.GetSystemMetrics(0), win32api.GetSystemMetrics(1) - 48
+        except Exception:
+            return 0, 0, 1920, 1032
+
+
+def _ordenar_ventanas():
+    x0, y0, ancho, alto = _area_trabajo()
     vts = _ventanas_ordenables()
     if not vts:
         return "No hay ventanas que ordenar, señor."
     n = len(vts)
-    # 1 -> full; 2 -> lado a lado; 3-4 -> cuadrícula 2x2.
+    # 1 -> full; 2 -> lado a lado; 3-4 -> cuadrícula 2x2. Todo relativo al origen del monitor.
     if n == 1:
-        celdas = [(0, 0, ancho, alto)]
+        celdas = [(x0, y0, ancho, alto)]
     elif n == 2:
-        celdas = [(0, 0, ancho // 2, alto), (ancho // 2, 0, ancho // 2, alto)]
+        celdas = [(x0, y0, ancho // 2, alto), (x0 + ancho // 2, y0, ancho // 2, alto)]
     else:
         cw, ch = ancho // 2, alto // 2
-        celdas = [(0, 0, cw, ch), (cw, 0, cw, ch), (0, ch, cw, ch), (cw, ch, cw, ch)]
+        celdas = [(x0, y0, cw, ch), (x0 + cw, y0, cw, ch),
+                  (x0, y0 + ch, cw, ch), (x0 + cw, y0 + ch, cw, ch)]
     for hwnd, (x, y, w, h) in zip(vts, celdas):
         try:
             win32gui.ShowWindow(hwnd, 9)                  # SW_RESTORE
@@ -342,18 +532,13 @@ def _atajo(combo):
         return f"No pude ejecutar el atajo, señor: {e}"
 
 
-def controlar_pantalla(accion, objetivo=""):
-    """Control VISIBLE de la PC (mouse/teclado sobre lo que hay en pantalla). accion:
-    'clic' / 'doble_clic' / 'clic_derecho' (busca el objetivo por nombre; si no lo encuentra, lo
-    ubica VIENDO la pantalla — cubre CUALQUIER cosa visible, no solo lo que tiene nombre accesible),
-    'arrastrar' (objetivo='X hasta Y'), 'ordenar' (mosaico de ventanas), 'enfocar' (trae una app al
-    frente), 'escribir' (teclea texto), 'scroll' (arriba/abajo), 'cerrar_pestana' (Ctrl+W),
-    'seleccionar' (Ctrl+A), 'atajo' (combo de teclas)."""
-    a = _norm(accion)
+def _despachar(a, objetivo):
     if "doble" in a:
         return _clic_en(objetivo, "doble")
     if "derech" in a or "secundario" in a or "right" in a:
         return _clic_en(objetivo, "derecho")
+    if "ajust" in a or "reglar" in a or "calibr" in a:
+        return _ajustar_visual(objetivo)
     if "arrastr" in a or "drag" in a:
         return _arrastrar(objetivo)
     if "clic" in a or "click" in a or "presion" in a or "pulsa el boton" in a:
@@ -372,5 +557,26 @@ def controlar_pantalla(accion, objetivo=""):
         return _seleccionar_todo()
     if "atajo" in a or "combinacion" in a or "teclas" in a or "presiona" in a:
         return _atajo(objetivo)
-    return ("No reconozco esa acción, señor (clic, doble_clic, clic_derecho, arrastrar, ordenar, "
-            "enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo).")
+    return ("No reconozco esa acción, señor (clic, doble_clic, clic_derecho, arrastrar, ajustar, "
+            "ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo).")
+
+
+def controlar_pantalla(accion, objetivo=""):
+    """Control VISIBLE de la PC (mouse/teclado sobre lo que hay en pantalla). accion:
+    'clic' / 'doble_clic' / 'clic_derecho' (busca el objetivo por nombre; si no lo encuentra, lo
+    ubica VIENDO la pantalla — cubre CUALQUIER cosa visible, no solo lo que tiene nombre accesible),
+    'arrastrar' (objetivo='X hasta Y'), 'ajustar' (objetivo='el slider X hasta Y' — mira, mueve y
+    REMIRA hasta lograrlo), 'ordenar' (mosaico de ventanas), 'enfocar' (trae una app al frente),
+    'escribir' (teclea texto), 'scroll' (arriba/abajo), 'cerrar_pestana' (Ctrl+W), 'seleccionar'
+    (Ctrl+A), 'atajo' (combo de teclas).
+    Todo corre dentro de una operación cancelable: Marco puede parar con Ctrl+Alt+P."""
+    a = _norm(accion)
+    try:
+        with Cancelacion.operacion(f"{a} en pantalla"):
+            return _despachar(a, objetivo)
+    except Cancelacion.Cancelado:
+        try:
+            pyautogui.mouseUp()      # no dejar el botón trabado si se cortó a medio arrastre
+        except Exception:
+            pass
+        return f"Detenido, señor ({Cancelacion.motivo()})."
