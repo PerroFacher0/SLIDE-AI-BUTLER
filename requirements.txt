@@ -172,3 +172,8 @@ python-docx
 playwright
 keyring
 pyaudiowpatch
+# brillo por DDC/CI (monitores externos, no solo la pantalla del portatil)
+screen-brightness-control
+# OCR LOCAL para la memoria visual: usa el motor que ya trae Windows, nada sale del PC.
+# Sin esto la memoria visual sigue viva, pero solo registra que ventana estuvo activa.
+winsdk

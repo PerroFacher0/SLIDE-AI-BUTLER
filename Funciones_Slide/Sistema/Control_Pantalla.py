@@ -94,6 +94,25 @@ def _norm(t):
     return (t or "").strip().lower().translate(str.maketrans("áéíóúü", "aeiouu"))
 
 
+# ── Enganches opcionales (HUD y grabadora de macros) ─────────────────────────
+# Los dos son ADORNOS: si fallan o no están, la acción se hace igual. Import perezoso para no
+# crear un ciclo (Macros necesita a este módulo para reproducir los pasos).
+def _mira(x, y, etiqueta):
+    try:
+        from Interfaz import Mira
+        Mira.marcar(x, y, etiqueta)
+    except Exception:
+        pass
+
+
+def _grabar(tipo, objetivo, metodo=None, x=None, y=None):
+    try:
+        from Funciones_Slide.Sistema import Macros
+        Macros.registrar(tipo, objetivo, metodo, x, y)
+    except Exception:
+        pass
+
+
 # ── Localización por NOMBRE (UI Automation) — rápido, sin LLM ────────────────
 def _ubicar_por_nombre(objetivo_n):
     if auto is None:
@@ -242,6 +261,7 @@ def _clic_en(objetivo, tipo="clic"):
     if x is None:
         return f"No encontré «{objetivo}» en pantalla, señor (ni por nombre ni viéndola)."
     try:
+        _mira(x, y, nombre)                    # marca el blanco ANTES de moverse (se puede frenar)
         pyautogui.moveTo(x, y, duration=0.5)   # movimiento VISIBLE del cursor
         if tipo == "doble":
             pyautogui.doubleClick()
@@ -249,6 +269,8 @@ def _clic_en(objetivo, tipo="clic"):
             pyautogui.rightClick()
         else:
             pyautogui.click()
+        _grabar({"doble": "doble_clic", "derecho": "clic_derecho"}.get(tipo, "clic"),
+                objetivo, metodo, x, y)
         verbo = {"doble": "doble clic", "derecho": "clic derecho"}.get(tipo, "clic")
         cola = "" if metodo == "estructura" else " (lo ubiqué viendo la pantalla)"
         return f"Listo, señor. Hice {verbo} en «{nombre}».{cola}"
@@ -464,6 +486,7 @@ def _enfocar_app(objetivo):
         hwnd = destino[0]
         win32gui.ShowWindow(hwnd, 9)            # SW_RESTORE
         win32gui.SetForegroundWindow(hwnd)
+        _grabar("enfocar", objetivo)
         return f"Al frente, señor: {win32gui.GetWindowText(hwnd)}."
     except Exception as e:
         return f"No pude traerla al frente, señor: {e}"
@@ -477,6 +500,7 @@ def _escribir(texto):
         return "¿Qué quiere que escriba, señor?"
     try:
         pyautogui.typewrite(texto, interval=0.02)   # escritura VISIBLE donde esté el cursor
+        _grabar("escribir", texto)
         return f"Escrito, señor: {texto[:60]}"
     except Exception as e:
         return f"No pude escribir, señor: {e}"
@@ -489,6 +513,7 @@ def _scroll(objetivo):
     cantidad = -600 if ("abajo" in o or "baja" in o or "down" in o) else 600
     try:
         pyautogui.scroll(cantidad)
+        _grabar("scroll", objetivo)
         return "Listo, señor."
     except Exception as e:
         return f"No pude hacer scroll, señor: {e}"
@@ -499,6 +524,7 @@ def _cerrar_pestana():
         return "No tengo control de teclado, señor."
     try:
         pyautogui.hotkey("ctrl", "w")
+        _grabar("cerrar_pestana", "")
         return "Cerré la pestaña, señor."
     except Exception as e:
         return f"No pude cerrar la pestaña, señor: {e}"
@@ -509,6 +535,7 @@ def _seleccionar_todo():
         return "No tengo control de teclado, señor."
     try:
         pyautogui.hotkey("ctrl", "a")
+        _grabar("seleccionar", "")
         return "Seleccioné todo, señor."
     except Exception as e:
         return f"No pude seleccionar, señor: {e}"
@@ -527,6 +554,7 @@ def _atajo(combo):
     teclas = [mapa.get(t, t) for t in teclas]
     try:
         pyautogui.hotkey(*teclas)
+        _grabar("atajo", combo)
         return f"Listo, señor. Pulsé {' + '.join(teclas)}."
     except Exception as e:
         return f"No pude ejecutar el atajo, señor: {e}"

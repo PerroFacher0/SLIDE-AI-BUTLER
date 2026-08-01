@@ -46,6 +46,8 @@ from Funciones_Slide.Sistema.Presencia import iniciar_presencia
 from Funciones_Slide.Comunicacion.Vigilante_Llamadas import iniciar_vigilante_llamadas
 from Funciones_Slide.Sistema.Vigilante_Pantalla import iniciar_vigilante_pantalla
 from Funciones_Slide.Sistema.Vigilante_Portapapeles import iniciar_vigilante_portapapeles
+from Funciones_Slide.Sistema.Vigilante_Eventos import iniciar_vigilante_eventos
+from Nucleo_Slide.Memoria_Visual import iniciar_memoria_visual
 from Funciones_Slide.Sistema.Vigilante_Reunion import iniciar_vigilante_reunion
 from Nucleo_Slide.Conciencia_Ambiental import iniciar_conciencia_ambiental
 from Nucleo_Slide.Perfil_Marco import iniciar_perfil
@@ -112,6 +114,8 @@ iniciar_presencia(hablado_del_asistente)      # te saluda al llegar al PC (ve tu
 iniciar_vigilante_llamadas(hablado_del_asistente)  # te avisa de llamadas entrantes al PC
 iniciar_vigilante_pantalla(hablado_del_asistente)  # te avisa si una app se congela / hay un error
 iniciar_vigilante_portapapeles(hablado_del_asistente)  # reacciona a lo que copias (error/YouTube)
+iniciar_vigilante_eventos(hablado_del_asistente)   # USB conectado / descarga terminada
+iniciar_memoria_visual()                           # pasado visual de la pantalla (APAGADA por defecto)
 iniciar_vigilante_reunion(hablado_del_asistente)   # modo reunión: silencia distracciones en llamadas
 iniciar_conciencia_ambiental()                     # mira el estado del PC y decide solo qué hacer
 iniciar_perfil()                                   # aprende quién es Marco con el tiempo
@@ -199,6 +203,14 @@ try:
 except Exception as _e:
     _overlay = None
     print(f"[overlay] omitido: {_e}")
+
+# LA MIRA: marca en pantalla DÓNDE va a hacer clic AIDEN antes de moverse (da tiempo a verlo y a
+# frenarlo con Ctrl+Alt+P). Va aquí porque necesita el hilo de Qt. Aislada: si falla, no afecta nada.
+try:
+    from Interfaz.Mira import iniciar as _iniciar_mira
+    _iniciar_mira()
+except Exception as _e:
+    print(f"[mira] omitida: {_e}")
 
 # Qt corre para siempre aquí (esto es lo "always-on"); se sale solo con "Salir" del tray.
 sys.exit(app.exec())

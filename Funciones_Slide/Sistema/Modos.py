@@ -9,6 +9,8 @@ from Funciones_Slide.Sistema.Vigilante_Pantalla import pausar_vigilante_pantalla
 from Funciones_Slide.Sistema.Vigilante_Portapapeles import pausar_vigilante_portapapeles
 from Funciones_Slide.Sistema.Vigilante_Reunion import pausar_vigilante_reunion
 from Nucleo_Slide.Conciencia_Ambiental import pausar_conciencia
+from Funciones_Slide.Sistema.Vigilante_Eventos import pausar_vigilante_eventos
+from Nucleo_Slide.Memoria_Visual import pausar_memoria_visual
 from Voz_Slide.Transcriptor import descargar_modelo_voz, recargar_modelo_voz
 from Voz_Slide.Herramientas_del_asistente import descargar_kokoro, recargar_kokoro, _lock_audio
 
@@ -64,6 +66,8 @@ def modo_gaming(activar):
     pausar_vigilante_portapapeles(encender) # gaming ON  -> portapapeles inteligente en pausa
     pausar_vigilante_reunion(encender)      # gaming ON  -> detector de reuniones en pausa
     pausar_conciencia(encender)             # gaming ON  -> conciencia ambiental en pausa
+    pausar_vigilante_eventos(encender)      # gaming ON  -> avisos de USB/descargas en pausa
+    pausar_memoria_visual(encender)         # gaming ON  -> deja de mirar la pantalla
     try:                                    # avisa a la conciencia compartida el modo actual
         from Nucleo_Slide.Estado_Del_Mundo import actualizar, registrar_evento
         actualizar(modo="gaming" if encender else "normal")

@@ -558,20 +558,42 @@ _HERRAMIENTAS_WEB = [
      "parameters": {"type": "object", "properties": {"texto": {"type": "string"}}, "required": ["texto"]}}},
     {"type": "function", "function": {"name": "estado_pagina", "description": "Dice si la página cargó, si es una pantalla de pago final, y si hay un reto de verificación humana (CAPTCHA/Cloudflare) bloqueando.",
      "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "pedir_a_marco", "description": "Le pregunta algo a Marco AL CELULAR y espera su respuesta. Úsala SOLO para lo que es imposible saber desde aquí: un código de verificación de dos pasos (2FA) que le llegó por SMS o a una app, o un dato personal que falta en un formulario. Jamás para saltarse un CAPTCHA ni un pago.",
+     "parameters": {"type": "object", "properties": {"pregunta": {"type": "string"}}, "required": ["pregunta"]}}},
     {"type": "function", "function": {"name": "terminar", "description": "Termina la tarea de navegación: da el reporte final para Marco.",
      "parameters": {"type": "object", "properties": {"reporte": {"type": "string"}}, "required": ["reporte"]}}},
 ]
+
+
+def pedir_a_marco(pregunta):
+    """Le pregunta algo a Marco al CELULAR y espera. Para el código 2FA que llega al teléfono: sin
+    esto, una tarea que topaba con la verificación en dos pasos se moría ahí mismo."""
+    try:
+        from Funciones_Slide.Comunicacion.Telegram_Control import preguntar, hay_celular
+    except Exception:
+        return "No tengo puente con el celular de Marco; no puedo preguntarle nada estando él fuera."
+    if not hay_celular():
+        return ("No hay puente con el celular (falta configurar Telegram). Si Marco está frente al "
+                "PC, puede escribirlo él mismo en la ventana del navegador.")
+    r = preguntar(f"AIDEN necesita esto para seguir navegando:\n{pregunta}", timeout=180)
+    return f"Marco respondió: {r}" if r else "Marco no respondió a tiempo; no puedo continuar con eso."
+
+
 _FUNCIONES_WEB = {
     "ir_a": ir_a, "clic_en": clic_en, "escribir_en": escribir_en,
     "cerrar_popups": cerrar_popups, "explorar_y_resumir": explorar_y_resumir,
     "mantener_cursor_en": mantener_cursor_en, "arrastrar_de_a": arrastrar_de_a,
     "anotar_nota": anotar_nota, "estado_pagina": estado_pagina,
+    "pedir_a_marco": pedir_a_marco,
 }
 
 _SISTEMA_WEB = (
     "Eres AIDEN navegando la web por Marco. Cumple su objetivo paso a paso usando SOLO estas "
     "herramientas de navegador (ir_a, clic_en, escribir_en, cerrar_popups, explorar_y_resumir, "
-    "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina). "
+    "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina, pedir_a_marco). "
+    "Si la página pide un CÓDIGO DE VERIFICACIÓN (2FA) que le llegó al teléfono a Marco, o un dato "
+    "personal que no tienes, usa pedir_a_marco: él te lo contesta al celular y sigues. Eso NO "
+    "aplica a CAPTCHAs ni a pagos: esos se reportan y se termina. "
     "Tras cada acción, antes de la siguiente, considera si conviene cerrar_popups. Si un clic dice "
     "que se detuvo por ser un PAGO/pedido final, NO insistas: repórtalo tal cual con 'terminar' — "
     "jamás intentes rodear ese freno. Si ir_a o estado_pagina reportan un RETO DE SEGURIDAD "

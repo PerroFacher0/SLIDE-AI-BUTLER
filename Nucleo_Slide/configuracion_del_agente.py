@@ -10,6 +10,10 @@ from Funciones_Slide.Comunicacion.Llamadas import contestar_llamada
 from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, ajustar_brillo, buscar_archivo
 from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
 from Nucleo_Slide.Cancelacion import cancelar
+from Funciones_Slide.Sistema.Macros import macro
+from Funciones_Slide.Sistema.Perifericos import perifericos
+from Funciones_Slide.Comunicacion.Telegram_Control import avisar_al_celular
+from Nucleo_Slide.Memoria_Visual import memoria_visual
 from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
@@ -806,6 +810,68 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "macro",
+            "description": "Convierte en MACRO reutilizable la secuencia que AIDEN acaba de hacer en pantalla, y la repite despues por su nombre. Usala cuando Marco diga 'guarda eso como X', 'aprendete eso', 'la proxima hazlo directo' (accion='guardar'), o cuando pida repetir algo aprendido: 'haz X', 'ejecuta la macro X' (accion='ejecutar'). Vale MUCHISIMO la pena: los pasos que costaron analisis visual quedan grabados y la repeticion es instantanea y gratis. NO la uses para tareas con hora (eso es programar_orden) ni para rutinas de ajustes del sistema (eso es crear_protocolo).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "guardar | ejecutar | listar | borrar"},
+                    "nombre": {"type": "string", "description": "Como se llama la macro (ej. 'exportar reporte')."},
+                    "pasos": {"type": "integer", "description": "Solo para guardar: cuantas de las ULTIMAS acciones incluir. 0 o vacio = todas las recientes."}
+                },
+                "required": ["accion"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "perifericos",
+            "description": "Hardware CONECTADO al PC. accion='audio': cambia POR DONDE suena ('pasa el sonido a los audifonos', 'pon el audio en los parlantes'); sin objetivo, lista las salidas. accion='bateria': cuanta bateria les queda al mouse, teclado o audifonos inalambricos. accion='brillo': brillo de CADA monitor, incluidos los EXTERNOS por DDC/CI (ajustar_brillo y brillo_exacto solo sirven para la pantalla del portatil; para un monitor externo usa ESTA).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "audio | bateria | brillo"},
+                    "objetivo": {"type": "string", "description": "Parte del nombre del dispositivo o monitor (ej. 'sony', 'audifonos'). Vacio = todos / listar."},
+                    "nivel": {"type": "integer", "description": "Solo para brillo: 0-100. Vacio para solo consultar."}
+                },
+                "required": ["accion"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memoria_visual",
+            "description": "El PASADO VISUAL de la pantalla de Marco: permite responder '¿que decia la pantalla hace 10 minutos?', '¿cual era ese error que se cerro?', '¿en que estaba yo hace un rato?'. accion='buscar' con consulta (texto) o minutos (hace cuanto). Tambien activar / desactivar / estado / olvidar. Es SENSIBLE: nace apagada, guarda solo texto (nunca imagenes), lee en LOCAL, salta bancos y gestores de contraseñas, y olvida sola a las 24 horas. Si Marco pregunta por algo que estuvo en pantalla y esta apagada, dile que puede encenderla.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "buscar | activar | desactivar | estado | olvidar"},
+                    "consulta": {"type": "string", "description": "Que texto buscar en lo que hubo en pantalla."},
+                    "minutos": {"type": "integer", "description": "Hace cuantos minutos mirar, si no hay texto que buscar."}
+                },
+                "required": ["accion"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "avisar_al_celular",
+            "description": "Le manda un mensaje al CELULAR de Marco por Telegram, sin que el haya preguntado. Usala cuando termine algo largo que el pidio (una mision, una investigacion, una descarga) y pueda no estar frente al PC, o cuando pase algo que deba saber ya. NO la uses para responder lo que te acaba de preguntar aqui.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mensaje": {"type": "string", "description": "Que decirle, en una o dos frases."}
+                },
+                "required": ["mensaje"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "cancelar",
             "description": "FRENO DE EMERGENCIA: detiene lo que AIDEN este EJECUTANDO ahora mismo (un comando largo en el PC, una secuencia de clics, un ajuste visual). Usala cuando Marco diga 'para', 'detente', 'cancela', 'ya no', 'olvidalo' MIENTRAS algo esta corriendo. Marco tambien puede pararlo el mismo con Ctrl+Alt+P. NO la uses para cerrar el asistente (eso es Salir) ni para cancelar un recado programado (eso es programar_orden con accion='cancelar').",
             "parameters": {
@@ -1056,6 +1122,10 @@ tools_map = {
     "proyecto": proyecto,
     "controlar_pantalla": controlar_pantalla,
     "cancelar": cancelar,
+    "macro": macro,
+    "perifericos": perifericos,
+    "memoria_visual": memoria_visual,
+    "avisar_al_celular": avisar_al_celular,
     "gestionar_metas": gestionar_metas,
     "ejecutar_mision": ejecutar_mision,
     "recordar_a_fondo": recordar_a_fondo,
