@@ -177,3 +177,10 @@ screen-brightness-control
 # OCR LOCAL para la memoria visual: usa el motor que ya trae Windows, nada sale del PC.
 # Sin esto la memoria visual sigue viva, pero solo registra que ventana estuvo activa.
 winsdk
+# OCR alternativo en CPU pura (ONNX): no toca la VRAM, que ya cargan Whisper, Kokoro y el LLM.
+# Solo hace falta si winsdk no esta disponible.
+rapidocr-onnxruntime
+# grabar el mouse y el teclado de Marco para que AIDEN aprenda una secuencia mirandolo
+pynput
+# puente serie con la placa ESP32/Arduino (LED de estado, reles, pantallita)
+pyserial

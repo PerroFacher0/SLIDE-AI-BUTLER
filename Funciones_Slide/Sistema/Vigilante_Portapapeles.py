@@ -70,6 +70,14 @@ def _revisar(hablar):
     if not actual or actual == _ultimo:
         return
     _ultimo = actual                      # registra el cambio
+    # Publica al bus de eventos para que 'esperar_evento' pueda despertar con esto ("espera a que
+    # copie el enlace"). Va aquí y no en un sondeo aparte: el portapapeles ya se mira desde este
+    # hilo, no tiene sentido que dos vigilantes pregunten lo mismo cada dos segundos.
+    try:
+        from Funciones_Slide.Sistema.Vigilante_Eventos import publicar
+        publicar("portapapeles", "", "", actual[:200])
+    except Exception:
+        pass
     if actual == _ultimo_ofrecido:        # ya ofrecimos sobre esto
         return
     frase = _clasificar(actual)

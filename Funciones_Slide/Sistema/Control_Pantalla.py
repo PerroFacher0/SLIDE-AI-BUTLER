@@ -311,6 +311,53 @@ def _arrastrar(descripcion):
         return f"No pude arrastrar, señor: {e}"
 
 
+def _caja_por_nombre(objetivo_n):
+    """Rectángulo de un elemento localizado por la estructura de accesibilidad, o None."""
+    if auto is None:
+        return None
+    _co_init()
+    try:
+        ventana = auto.GetForegroundControl()
+        if not ventana:
+            return None
+        for ctrl, _d in auto.WalkControl(ventana, maxDepth=22):
+            try:
+                if ctrl.ControlTypeName in _CLICABLES and objetivo_n in _norm(ctrl.Name):
+                    r = ctrl.BoundingRectangle
+                    return (r.left, r.top, r.right, r.bottom), (ctrl.Name or None)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
+def _senalar(objetivo, segundos=5.0):
+    """Dibuja un recuadro sobre algo de la pantalla SIN tocarlo. Para 'señálame dónde está X':
+    responder con palabras dónde queda un botón es inútil; marcarlo se entiende de un vistazo."""
+    objetivo = str(objetivo or "").strip()
+    if not objetivo:
+        return "¿Qué quiere que le señale, señor?"
+    nombre = objetivo
+    hallazgo = _caja_por_nombre(_norm(objetivo))
+    if hallazgo:
+        caja, nombre = hallazgo[0], (hallazgo[1] or objetivo)
+    else:
+        caja = _detectar_caja(objetivo)      # respaldo por visión
+    if not caja:
+        return f"No encontré «{objetivo}» en pantalla, señor (ni por nombre ni viéndola)."
+    try:
+        from Interfaz import Mira
+        pintado = Mira.marcar_caja(caja[0], caja[1], caja[2], caja[3], nombre, segundos)
+    except Exception:
+        pintado = False
+    cx, cy = (caja[0] + caja[2]) // 2, (caja[1] + caja[3]) // 2
+    if pintado:
+        return f"Ahí lo tiene, señor: se lo marqué en pantalla («{nombre}»)."
+    return (f"«{nombre}» está en la posición {cx}, {cy} de la pantalla, señor. "
+            "No pude dibujarle el recuadro porque la interfaz no está corriendo.")
+
+
 _MAX_PASOS_AJUSTE = 5      # tope de iteraciones mirar-mover-remirar
 _CERCA = 5                 # px: más cerca que esto del destino, se da por logrado
 
@@ -565,6 +612,8 @@ def _despachar(a, objetivo):
         return _clic_en(objetivo, "doble")
     if "derech" in a or "secundario" in a or "right" in a:
         return _clic_en(objetivo, "derecho")
+    if "senal" in a or "señal" in a or "muestra" in a or "indica" in a or "resalt" in a:
+        return _senalar(objetivo)
     if "ajust" in a or "reglar" in a or "calibr" in a:
         return _ajustar_visual(objetivo)
     if "arrastr" in a or "drag" in a:

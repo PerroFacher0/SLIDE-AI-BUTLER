@@ -21,20 +21,40 @@
 # viene con el sistema) -> Tesseract -> ninguno. Sin motor NO se apaga: sigue registrando qué
 # aplicación y qué ventana estuvieron activas, que ya responde "¿en qué andaba yo a las 3?".
 
+#
+# DOS ESCALAS DE TIEMPO, porque "hace un rato" significa dos cosas muy distintas:
+#   - EL ÍNDICE LARGO (SQLite, cada 45 s, 24 h): "¿qué decía esa factura de esta mañana?".
+#   - EL CARRETE CORTO (RAM, ~1.5 por segundo, 2 minutos): "¿qué decía el error que PARPADEÓ hace
+#     diez segundos?". A 45 segundos por muestra eso se perdía siempre; un aviso que dura tres
+#     segundos no cae nunca en una foto cada cuarenta y cinco.
+# El carrete corto vive SOLO en RAM (nunca toca el disco), guarda los cuadros comprimidos en gris a
+# 720p (~15 MB los dos minutos completos) y NO les hace OCR al vuelo: leerlos cuesta CPU, así que
+# solo se leen los que hagan falta, cuando Marco pregunta. Así el costo en reposo es casi cero.
+
 import json
 import os
 import re
 import sqlite3
 import threading
 import time
+from collections import deque
 
 _RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BD = os.path.join(_RAIZ, "memoria_visual.db")
 _CONF = os.path.join(_RAIZ, "memoria_visual.json")
 
-INTERVALO = 45          # seg entre miradas (barato: solo si la pantalla cambió de verdad)
+INTERVALO = 45          # seg entre miradas del índice largo (solo si la pantalla cambió de verdad)
 RETENCION_H = 24        # horas que se conserva; más viejo que eso, se borra solo
 _MIN_TEXTO = 12         # menos caracteres que esto no vale la pena guardar
+
+# ── Carrete corto (RAM) ──────────────────────────────────────────────────────
+FPS_CARRETE = 1.5       # cuadros por segundo
+SEG_CARRETE = 120       # cuánto pasado se conserva
+_MAX_CUADROS = int(FPS_CARRETE * SEG_CARRETE)
+_ANCHO, _ALTO = 1280, 720
+_CALIDAD = 60
+_carrete = deque(maxlen=_MAX_CUADROS)   # [(t, app, titulo, jpeg_bytes)]
+_lock_carrete = threading.RLock()
 
 # Ventanas que NO se miran jamás. Se comparan en minúsculas contra el título y el proceso.
 _EXCLUIDAS = (
@@ -99,6 +119,13 @@ def _elegir_motor():
     except Exception:
         pass
     try:
+        # ONNX puro en CPU: no toca la GPU, que está ocupada con Whisper, Kokoro y el LLM.
+        from rapidocr_onnxruntime import RapidOCR  # noqa: F401
+        _motor_ocr = "rapidocr"
+        return _motor_ocr
+    except Exception:
+        pass
+    try:
         import pytesseract
         pytesseract.get_tesseract_version()
         _motor_ocr = "tesseract"
@@ -107,6 +134,21 @@ def _elegir_motor():
         pass
     _motor_ocr = "ninguno"
     return _motor_ocr
+
+
+_rapidocr = None
+
+
+def _ocr_rapido(img):
+    global _rapidocr
+    from rapidocr_onnxruntime import RapidOCR
+    if _rapidocr is None:
+        _rapidocr = RapidOCR()
+    import numpy as np
+    resultado, _ = _rapidocr(np.array(img.convert("RGB")))
+    if not resultado:
+        return ""
+    return " ".join(linea[1] for linea in resultado if len(linea) > 1)
 
 
 def _ocr_windows(img):
@@ -140,6 +182,8 @@ def _extraer_texto(img):
     try:
         if motor == "windows":
             return _ocr_windows(img)
+        if motor == "rapidocr":
+            return _ocr_rapido(img)
         if motor == "tesseract":
             import pytesseract
             return pytesseract.image_to_string(img, lang="spa+eng")
@@ -222,6 +266,71 @@ def _bucle():
             continue
 
 
+# ── Carrete corto: el pasado inmediato, en RAM ───────────────────────────────
+def _comprimir(img):
+    """Gris + 720p + JPEG: un cuadro pesa ~80 KB, así los dos minutos caben en ~15 MB."""
+    import io
+    chica = img.convert("L")
+    if chica.width > _ANCHO:
+        chica = chica.resize((_ANCHO, _ALTO))
+    buf = io.BytesIO()
+    chica.save(buf, format="JPEG", quality=_CALIDAD)
+    return buf.getvalue()
+
+
+def _bucle_carrete():
+    """Captura continua y barata. NO hace OCR: eso se paga solo cuando Marco pregunta."""
+    espera = 1.0 / FPS_CARRETE
+    ultima = None
+    while True:
+        time.sleep(espera)
+        try:
+            if not _activa or _pausado:
+                continue
+            app, titulo = _ventana_activa()
+            if _prohibida(app, titulo):
+                continue
+            try:
+                from PIL import ImageGrab
+                img = ImageGrab.grab()
+            except Exception:
+                continue
+            firma = _huella(img)
+            if _muy_parecidas(firma, ultima):
+                continue                 # la pantalla no cambió: no gastamos un cuadro
+            ultima = firma
+            with _lock_carrete:
+                _carrete.append((time.time(), app, titulo, _comprimir(img)))
+        except Exception:
+            continue
+
+
+def _leer_carrete(segundos_atras, ventana=6.0, maximo=3):
+    """OCR BAJO DEMANDA sobre los cuadros de hace N segundos. Devuelve [(t, titulo, texto)]."""
+    objetivo = time.time() - max(0, segundos_atras)
+    with _lock_carrete:
+        candidatos = [c for c in _carrete if abs(c[0] - objetivo) <= ventana]
+        if not candidatos:
+            candidatos = sorted(_carrete, key=lambda c: abs(c[0] - objetivo))[:maximo]
+        candidatos = list(candidatos)
+    if not candidatos:
+        return []
+    # Repartidos por el rango (no tres cuadros casi idénticos seguidos).
+    paso = max(1, len(candidatos) // maximo)
+    elegidos = candidatos[::paso][:maximo]
+
+    import io
+    from PIL import Image
+    salida = []
+    for t, _app, titulo, jpeg in elegidos:
+        try:
+            texto = " ".join((_extraer_texto(Image.open(io.BytesIO(jpeg))) or "").split())
+        except Exception:
+            texto = ""
+        salida.append((t, titulo, texto))
+    return salida
+
+
 def pausar_memoria_visual(pausar=True):
     # Silencia la captura (lo usa el modo gaming / reunión).
     global _pausado
@@ -235,6 +344,9 @@ def iniciar_memoria_visual():
     if _hilo is None:
         _hilo = threading.Thread(target=_bucle, daemon=True)
         _hilo.start()
+        # El carrete corto va en su propio hilo: su ritmo (1.5/s) no tiene nada que ver con el
+        # del índice largo (cada 45 s), y no deben estorbarse.
+        threading.Thread(target=_bucle_carrete, daemon=True).start()
     print(f"[MemoriaVisual] {'ACTIVA' if _activa else 'apagada'} (OCR: {_elegir_motor()})")
     return True
 
@@ -304,9 +416,45 @@ def memoria_visual(accion="buscar", consulta="", minutos=0):
                 con.close()
         except Exception:
             n = 0
+        with _lock_carrete:
+            cuadros = len(_carrete)
+            peso = sum(len(c[3]) for c in _carrete) / 1e6
         return (f"Memoria visual: {'activa' if _activa else 'apagada'}, señor. "
                 f"Motor de lectura: {_elegir_motor()}. Tengo {n} instantáneas de las últimas "
-                f"{RETENCION_H} horas.")
+                f"{RETENCION_H} horas, y {cuadros} cuadros del último par de minutos en memoria "
+                f"({peso:.1f} MB).")
+
+    # ── reciente: el pasado INMEDIATO (segundos), del carrete en RAM ──
+    if a.startswith("recient") or a.startswith("acaba") or a.startswith("parpade"):
+        if not _activa:
+            return ("La memoria visual está apagada, señor, así que no guardé lo que acaba de pasar "
+                    "por la pantalla. Puede encenderla diciéndome 'activa la memoria visual'.")
+        try:
+            seg = int(minutos or 0)
+        except (TypeError, ValueError):
+            seg = 0
+        seg = seg if seg > 0 else 10        # aquí 'minutos' llega en SEGUNDOS (es el pasado corto)
+        lecturas = _leer_carrete(seg)
+        if not lecturas:
+            return (f"No tengo nada guardado de hace {seg} segundos, señor "
+                    "(el carrete solo alcanza los dos últimos minutos).")
+        if _elegir_motor() == "ninguno":
+            titulos = "; ".join(t for _, t, _ in lecturas if t) or "sin título"
+            return (f"Hace {seg} segundos tenía esto al frente, señor: {titulos}. No puedo leer lo "
+                    "que decía porque no tengo motor de lectura instalado (pip install winsdk).")
+        trozos = []
+        for t, titulo, texto in lecturas:
+            hace = int(max(0, time.time() - t))
+            if consulta:
+                # Si busca algo puntual, se resaltan solo las líneas que lo mencionan.
+                pedazos = [f for f in re.split(r"(?<=[.!?])\s+|\s{2,}", texto)
+                           if consulta.lower() in f.lower()]
+                if pedazos:
+                    trozos.append(f"[hace {hace}s] " + " … ".join(pedazos[:3])[:500])
+                    continue
+            trozos.append(f"[hace {hace}s, en {titulo[:50]}] {texto[:500]}"
+                          if texto else f"[hace {hace}s] (sin texto legible)")
+        return "Esto había en su pantalla, señor:\n" + "\n\n".join(trozos)
 
     # ── buscar ──
     if not _activa:

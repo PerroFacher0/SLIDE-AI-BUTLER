@@ -16,20 +16,50 @@
 import threading
 import time
 
-_cola = []                 # peticiones pendientes de dibujar (las llena cualquier hilo)
+_cola = []                 # marcas de punto pendientes de dibujar (las llena cualquier hilo)
+_cajas = []                # recuadros etiquetados ("señálame dónde está el botón X")
+_mensajes = []             # carteles flotantes
 _lock = threading.RLock()
 _estado_txt = ""
 _ventana = None            # el widget, solo existe si Qt está vivo
 _activa = False
 
 MS_ANTES = 550             # cuánto se ve la mira antes de que el cursor se mueva
-_TTL = 1.6                 # s que dura una marca en pantalla
+_TTL = 1.6                 # s que dura una marca de punto
 
 
 def fijar_estado(texto):
     """Cambia la píldora de estado (escuchando / pensando / ejecutando). Vacío = ocultarla."""
     global _estado_txt
     _estado_txt = str(texto or "").strip()
+
+
+def marcar_caja(x1, y1, x2, y2, etiqueta="", segundos=4.0):
+    """Dibuja un recuadro sobre una zona de la pantalla. Para SEÑALAR sin tocar nada: 'dónde está
+    el botón de exportar'. A diferencia de marcar(), no mueve el cursor ni hace clic."""
+    if not _activa:
+        return False
+    with _lock:
+        _cajas.append({"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2),
+                       "etiqueta": str(etiqueta or "")[:60], "hasta": time.time() + segundos})
+    return True
+
+
+def mensaje(texto, segundos=5.0):
+    """Cartel flotante en pantalla. Para lo que conviene VER y no solo oír: un recordatorio, un
+    dato que hay que copiar a mano, el resultado de algo que corrió en segundo plano."""
+    if not _activa:
+        return False
+    with _lock:
+        _mensajes.append({"texto": str(texto or "")[:220], "hasta": time.time() + segundos})
+    return True
+
+
+def limpiar():
+    """Borra de inmediato todo lo dibujado."""
+    with _lock:
+        _cola.clear(); _cajas.clear(); _mensajes.clear()
+    return True
 
 
 def marcar(x, y, etiqueta="", esperar=True):
@@ -74,19 +104,38 @@ def _construir():
             self.show()
 
         def _latir(self):
+            ahora = time.time()
             with _lock:
-                vivos = [m for m in _cola if m["hasta"] > time.time()]
-                _cola[:] = vivos
+                _cola[:] = [m for m in _cola if m["hasta"] > ahora]
+                _cajas[:] = [c for c in _cajas if c["hasta"] > ahora]
+                _mensajes[:] = [m for m in _mensajes if m["hasta"] > ahora]
             self.update()
 
         def paintEvent(self, _e):
             with _lock:
-                marcas = list(_cola)
-            if not marcas and not _estado_txt:
+                marcas, cajas, carteles = list(_cola), list(_cajas), list(_mensajes)
+            if not marcas and not cajas and not carteles and not _estado_txt:
                 return
             ox, oy = self._origen
             p = QPainter(self)
             p.setRenderHint(QPainter.Antialiasing, True)
+
+            for c in cajas:
+                x1, y1 = c["x1"] - ox, c["y1"] - oy
+                w, h = max(2, c["x2"] - c["x1"]), max(2, c["y2"] - c["y1"])
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(QColor(255, 255, 255, 230), 2))
+                p.drawRoundedRect(x1 - 3, y1 - 3, w + 6, h + 6, 4, 4)
+                if c["etiqueta"]:
+                    f = QFont(); f.setPointSize(9); p.setFont(f)
+                    ancho = p.fontMetrics().horizontalAdvance(c["etiqueta"]) + 16
+                    # La etiqueta va encima salvo que no quepa; entonces baja.
+                    ey = y1 - 26 if y1 > 30 else y1 + h + 6
+                    p.setPen(Qt.NoPen)
+                    p.setBrush(QColor(16, 16, 18, 214))
+                    p.drawRoundedRect(x1 - 3, ey, ancho, 22, 5, 5)
+                    p.setPen(QColor(240, 240, 240, 240))
+                    p.drawText(x1 + 5, ey + 15, c["etiqueta"])
 
             for m in marcas:
                 queda = max(0.0, m["hasta"] - time.time()) / _TTL
@@ -104,6 +153,19 @@ def _construir():
                     f = QFont(); f.setPointSize(9); p.setFont(f)
                     p.setPen(QColor(255, 255, 255, min(235, alfa + 40)))
                     p.drawText(x + radio + 8, y + 4, m["etiqueta"])
+
+            # Carteles flotantes: apilados arriba al centro, donde no estorban al trabajo.
+            arriba = 34
+            for c in carteles:
+                f = QFont(); f.setPointSize(11); p.setFont(f)
+                ancho = min(self.width() - 80, p.fontMetrics().horizontalAdvance(c["texto"]) + 34)
+                cx = (self.width() - ancho) // 2
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(14, 14, 16, 226))
+                p.drawRoundedRect(cx, arriba, ancho, 40, 9, 9)
+                p.setPen(QColor(238, 238, 238, 245))
+                p.drawText(cx + 17, arriba + 26, c["texto"])
+                arriba += 48
 
             if _estado_txt:
                 f = QFont(); f.setPointSize(9); f.setLetterSpacing(QFont.PercentageSpacing, 108)

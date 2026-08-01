@@ -17,11 +17,29 @@
 # nativa con su bucle propio, y aquí el hilo de ventanas es de Qt: montar una ventana oculta solo
 # para esto sería más frágil que mirar un entero cada dos segundos.
 
+#
+# BUS DE EVENTOS Y ESPERA BLOQUEANTE: además de AVISAR, ahora AIDEN puede QUEDARSE ESPERANDO a que
+# algo pase ("avísame en cuanto termine de compilar", "espera a que copie el enlace"). Eso convierte
+# una pregunta que había que repetir en algo que se resuelve solo cuando ocurre.
+#
+# El cambio de ventana se detecta SONDEANDO GetForegroundWindow dos veces por segundo, no con
+# SetWinEventHook. El hook es más elegante sobre el papel, pero exige un bucle de mensajes de
+# Windows propio, y en este proceso el hilo de ventanas ya es de Qt: montar un segundo bucle de
+# mensajes en paralelo es una fuente clásica de cuelgues. Dos llamadas por segundo a una función
+# que solo devuelve un puntero cuestan una fracción de un 1% de CPU; la robustez vale más aquí.
+
 import os
 import threading
 import time
+from collections import deque
 
 INTERVALO_USB = 2        # seg entre revisiones del mapa de unidades
+INTERVALO_VENTANA = 0.5  # seg entre revisiones de la ventana en primer plano
+_MAX_EVENTOS = 20        # historial reciente que se conserva
+
+_eventos = deque(maxlen=_MAX_EVENTOS)   # [(t, tipo, proceso, titulo, detalle)]
+_esperas = []                            # waiters activos: [{criterio, evento, encontrado}]
+_lock_bus = threading.RLock()
 COOLDOWN = 25            # seg mínimos entre dos avisos (no atosigar)
 _ESTABLE = 1.5           # seg que el tamaño debe quedarse quieto para dar la descarga por terminada
 
@@ -37,6 +55,166 @@ def pausar_vigilante_eventos(pausar=True):
     # Silencia el vigilante (lo usa el modo gaming).
     global _pausado
     _pausado = bool(pausar)
+
+
+# ── Bus de eventos ───────────────────────────────────────────────────────────
+def publicar(tipo, proceso="", titulo="", detalle=""):
+    """Registra un evento y despierta a quien lo estuviera esperando. Lo llama este módulo y
+    también otros vigilantes (el del portapapeles), para no sondear dos veces lo mismo."""
+    ev = (time.time(), tipo, str(proceso or ""), str(titulo or ""), str(detalle or "")[:300])
+    with _lock_bus:
+        _eventos.append(ev)
+        for espera in list(_esperas):
+            if espera["encontrado"] is None and _coincide(ev, espera["criterio"]):
+                espera["encontrado"] = ev
+                espera["evento"].set()
+    return ev
+
+
+def _coincide(ev, criterio):
+    _t, tipo, proceso, titulo, detalle = ev
+    quiere_tipo = criterio.get("tipo") or ""
+    if quiere_tipo and quiere_tipo not in tipo:
+        return False
+    filtro = (criterio.get("filtro") or "").lower()
+    if filtro and filtro not in f"{proceso} {titulo} {detalle}".lower():
+        return False
+    return True
+
+
+def historial(cuantos=8):
+    """Los últimos eventos significativos, del más reciente al más viejo."""
+    with _lock_bus:
+        return list(_eventos)[-cuantos:][::-1]
+
+
+# ── Ventana en primer plano ──────────────────────────────────────────────────
+def _foco_actual():
+    try:
+        import win32gui
+        import win32process
+        h = win32gui.GetForegroundWindow()
+        titulo = win32gui.GetWindowText(h) or ""
+        proceso = ""
+        try:
+            import psutil
+            _, pid = win32process.GetWindowThreadProcessId(h)
+            proceso = psutil.Process(pid).name()
+        except Exception:
+            pass
+        return proceso, titulo
+    except Exception:
+        return "", ""
+
+
+# Ruido que no aporta nada como "evento" (el escritorio, el conmutador de ventanas).
+_IGNORAR = ("dwm.exe", "searchhost.exe", "shellexperiencehost.exe", "textinputhost.exe", "")
+
+
+def _bucle_ventanas():
+    anterior = None
+    while True:
+        time.sleep(INTERVALO_VENTANA)
+        try:
+            proceso, titulo = _foco_actual()
+            if not titulo or proceso.lower() in _IGNORAR:
+                continue
+            actual = (proceso, titulo)
+            if actual != anterior:
+                anterior = actual
+                publicar("ventana_foco", proceso, titulo)
+        except Exception:
+            continue
+
+
+# ── Espera bloqueante ────────────────────────────────────────────────────────
+def _esperar_cierre_proceso(nombre, timeout):
+    """Espera a que TERMINE un proceso (el caso '¿ya compiló?'). Si no está corriendo, se responde
+    de inmediato en vez de esperar en vano un timeout entero."""
+    try:
+        import psutil
+    except Exception:
+        return "No puedo vigilar procesos, señor (falta psutil)."
+    objetivo = nombre.lower().replace(".exe", "")
+
+    def _vivos():
+        pids = []
+        for p in psutil.process_iter(["name"]):
+            try:
+                if objetivo in (p.info["name"] or "").lower():
+                    pids.append(p.pid)
+            except Exception:
+                continue
+        return pids
+
+    if not _vivos():
+        return f"«{nombre}» no está corriendo ahora mismo, señor; no hay nada que esperar."
+    limite = time.time() + timeout
+    while time.time() < limite:
+        try:
+            from Nucleo_Slide import Cancelacion
+            if Cancelacion.cancelado():
+                return "Dejé de esperar, señor (me pidió parar)."
+        except Exception:
+            pass
+        time.sleep(1.0)
+        if not _vivos():
+            publicar("proceso_cierra", nombre, "", "terminó")
+            return f"Listo, señor: «{nombre}» terminó."
+    return f"Pasaron {timeout} segundos y «{nombre}» sigue corriendo, señor."
+
+
+def esperar_evento(tipo="ventana", filtro="", timeout_segundos=60):
+    """HERRAMIENTA: se queda ESPERANDO a que algo pase en el PC y avisa en cuanto ocurre.
+      tipo = ventana (cambia la app en primer plano) | portapapeles (Marco copia algo) |
+             usb (conecta una unidad) | descarga (termina una descarga) |
+             proceso_cierra (termina un programa: 'ya compiló', 'ya terminó de exportar')
+      filtro = texto que debe aparecer (nombre de app, del proceso, del archivo). Vacío = cualquiera.
+      timeout_segundos = cuánto esperar como máximo."""
+    t = str(tipo or "ventana").strip().lower()
+    filtro = str(filtro or "").strip()
+    try:
+        timeout = max(5, min(600, int(timeout_segundos)))
+    except (TypeError, ValueError):
+        timeout = 60
+
+    if "proceso" in t or "cierr" in t or "termin" in t:
+        if not filtro:
+            return "¿Qué programa quiere que espere a que termine, señor?"
+        return _esperar_cierre_proceso(filtro, timeout)
+
+    mapa = {"ventana": "ventana_foco", "foco": "ventana_foco", "app": "ventana_foco",
+            "portapapeles": "portapapeles", "copia": "portapapeles", "clipboard": "portapapeles",
+            "usb": "usb", "unidad": "usb", "descarga": "descarga", "archivo": "descarga"}
+    tipo_bus = mapa.get(t, t)
+
+    espera = {"criterio": {"tipo": tipo_bus, "filtro": filtro},
+              "evento": threading.Event(), "encontrado": None}
+    with _lock_bus:
+        _esperas.append(espera)
+    try:
+        llego = espera["evento"].wait(timeout=timeout)
+    finally:
+        with _lock_bus:
+            if espera in _esperas:
+                _esperas.remove(espera)
+
+    if not llego or not espera["encontrado"]:
+        detalle = f" «{filtro}»" if filtro else ""
+        return f"Pasaron {timeout} segundos y no ocurrió{detalle}, señor."
+    _t, _tp, proceso, titulo, detalle = espera["encontrado"]
+    if tipo_bus == "portapapeles":
+        return f"Marco acaba de copiar algo, señor: {detalle[:200]}"
+    if tipo_bus == "usb":
+        return f"Conectaron una unidad, señor: {titulo or detalle}"
+    if tipo_bus == "descarga":
+        return f"Terminó de descargarse, señor: {titulo or detalle}"
+    # El nombre de la APP importa tanto como el del documento: "cambió a diseno.psd" no dice
+    # cuál programa se abrió, que suele ser justo lo que Marco estaba esperando.
+    app = proceso.replace(".exe", "") if proceso else ""
+    if app and titulo:
+        return f"Ya está, señor: cambió a {app} ({titulo[:60]})."
+    return f"Ya está, señor: cambió a {titulo or app}."
 
 
 def _puedo_hablar():
@@ -100,9 +278,12 @@ def _bucle_usb(hablar):
             quitadas = conocidas - ahora
             conocidas = ahora
             for u in sorted(nuevas):
-                if not _puedo_hablar():
-                    break
                 nombre = _etiqueta(u) or "sin nombre"
+                # Se publica SIEMPRE (aunque el cooldown impida hablar): quien esté esperando
+                # este evento debe enterarse igual.
+                publicar("usb", "", f"{nombre} en {u[:2]}", u)
+                if not _puedo_hablar():
+                    continue
                 espacio = _cuanto_espacio(u)
                 detalle = f" ({espacio})" if espacio else ""
                 hablar(f"Conectó una unidad externa, señor: {nombre} en {u[:2]}{detalle}. "
@@ -168,6 +349,7 @@ def _bucle_descargas(hablar):
         def _avisar(self, ruta, nombre):
             if not _esperar_a_que_termine(ruta) or not os.path.exists(ruta):
                 return
+            publicar("descarga", "", nombre, ruta)   # siempre, aunque el cooldown calle la voz
             if not _puedo_hablar():
                 return
             try:
@@ -196,5 +378,6 @@ def iniciar_vigilante_eventos(hablar):
     """Arranca la vigilancia de USB y de descargas en hilos de fondo."""
     threading.Thread(target=_bucle_usb, args=(hablar,), daemon=True).start()
     threading.Thread(target=_bucle_descargas, args=(hablar,), daemon=True).start()
-    print("[Eventos] vigilante de USB y descargas activo.")
+    threading.Thread(target=_bucle_ventanas, daemon=True).start()
+    print("[Eventos] vigilante de USB, descargas y ventanas activo.")
     return True

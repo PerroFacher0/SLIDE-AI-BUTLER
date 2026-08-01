@@ -14,6 +14,8 @@ from Funciones_Slide.Sistema.Macros import macro
 from Funciones_Slide.Sistema.Perifericos import perifericos
 from Funciones_Slide.Comunicacion.Telegram_Control import avisar_al_celular
 from Nucleo_Slide.Memoria_Visual import memoria_visual
+from Funciones_Slide.Sistema.Vigilante_Eventos import esperar_evento
+from Funciones_Slide.Sistema.Hardware_Externo import hardware
 from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
@@ -658,11 +660,11 @@ tools = [
         "type": "function",
         "function": {
             "name": "controlar_pantalla",
-            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). Funciona en VARIOS MONITORES. USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, IR A UNA PESTANA del navegador por su nombre (accion 'clic' con el nombre de la pestana, ej. objetivo='GitHub'), ARRASTRAR una cosa hasta otra, AJUSTAR un control continuo hasta lograr un resultado (slider de brillo/volumen/recorte: mira, mueve y VUELVE A MIRAR hasta que quede bien), ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ajustar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
+            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). Funciona en VARIOS MONITORES. USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, IR A UNA PESTANA del navegador por su nombre (accion 'clic' con el nombre de la pestana, ej. objetivo='GitHub'), SENALAR donde esta algo dibujandole un recuadro en pantalla SIN tocarlo (accion 'senalar', para '¿donde esta el boton de exportar?' — mucho mejor que describirlo con palabras), ARRASTRAR una cosa hasta otra, AJUSTAR un control continuo hasta lograr un resultado (slider de brillo/volumen/recorte: mira, mueve y VUELVE A MIRAR hasta que quede bien), ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ajustar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | arrastrar | ajustar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
+                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | senalar | arrastrar | ajustar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
                     "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: la descripcion de lo que se ve (nombre del boton, nombre de la pestana, o una descripcion visual si no tiene nombre). Para arrastrar: 'X hasta Y'. Para ajustar: 'CONTROL hasta META' (ej. 'el slider de brillo hasta la mitad'). Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
                 },
                 "required": ["accion"]
@@ -810,12 +812,44 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "esperar_evento",
+            "description": "Se QUEDA ESPERANDO a que algo pase en el PC y avisa en cuanto ocurre. Usala cuando Marco diga 'avisame cuando termine de compilar', 'espera a que copie el enlace', 'dime cuando acabe de exportar', 'avisame cuando conecte el USB'. tipo='proceso_cierra' con filtro=nombre del programa es la mas util: espera a que ese programa TERMINE. NO la uses para recordatorios con hora (eso es programar_orden) ni para condiciones que ya se cumplieron (mira el estado directamente).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {"type": "string", "description": "ventana | portapapeles | usb | descarga | proceso_cierra"},
+                    "filtro": {"type": "string", "description": "Texto que debe aparecer (nombre del proceso o de la app, ej. 'Code.exe'). Vacio = cualquiera."},
+                    "timeout_segundos": {"type": "integer", "description": "Cuanto esperar como maximo (por defecto 60, tope 600)."}
+                },
+                "required": ["tipo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "hardware",
+            "description": "Habla con la placa fisica (ESP32/Arduino) conectada por USB: LED de estado que se ve de reojo, reles para encender luces, y pantallita. Usala si Marco menciona su placa, el LED, la lampara del escritorio o el panel fisico. OJO: si no hay placa conectada lo dice y no pasa nada, no insistas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "escanear | estado | salida | pantalla"},
+                    "comando": {"type": "string", "description": "Para 'estado': escuchando|pensando|ejecutando|exito|error|reposo. Para 'salida': el numero de pin. Para 'pantalla': el texto."},
+                    "valor": {"type": "integer", "description": "Solo para 'salida': 0 apaga, 1 enciende."}
+                },
+                "required": ["accion"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "macro",
             "description": "Convierte en MACRO reutilizable la secuencia que AIDEN acaba de hacer en pantalla, y la repite despues por su nombre. Usala cuando Marco diga 'guarda eso como X', 'aprendete eso', 'la proxima hazlo directo' (accion='guardar'), o cuando pida repetir algo aprendido: 'haz X', 'ejecuta la macro X' (accion='ejecutar'). Vale MUCHISIMO la pena: los pasos que costaron analisis visual quedan grabados y la repeticion es instantanea y gratis. NO la uses para tareas con hora (eso es programar_orden) ni para rutinas de ajustes del sistema (eso es crear_protocolo).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "guardar | ejecutar | listar | borrar"},
+                    "accion": {"type": "string", "description": "guardar (lo que AIDEN acaba de hacer) | grabar (mirar a Marco hacerlo) | detener (cierra la grabacion) | ejecutar | listar | borrar"},
                     "nombre": {"type": "string", "description": "Como se llama la macro (ej. 'exportar reporte')."},
                     "pasos": {"type": "integer", "description": "Solo para guardar: cuantas de las ULTIMAS acciones incluir. 0 o vacio = todas las recientes."}
                 },
@@ -847,9 +881,9 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "buscar | activar | desactivar | estado | olvidar"},
+                    "accion": {"type": "string", "description": "reciente (SEGUNDOS atras: lo que acaba de parpadear) | buscar (MINUTOS u horas atras) | activar | desactivar | estado | olvidar"},
                     "consulta": {"type": "string", "description": "Que texto buscar en lo que hubo en pantalla."},
-                    "minutos": {"type": "integer", "description": "Hace cuantos minutos mirar, si no hay texto que buscar."}
+                    "minutos": {"type": "integer", "description": "Para 'buscar': hace cuantos MINUTOS. Para 'reciente': hace cuantos SEGUNDOS (por defecto 10)."}
                 },
                 "required": ["accion"]
             }
@@ -1126,6 +1160,8 @@ tools_map = {
     "perifericos": perifericos,
     "memoria_visual": memoria_visual,
     "avisar_al_celular": avisar_al_celular,
+    "esperar_evento": esperar_evento,
+    "hardware": hardware,
     "gestionar_metas": gestionar_metas,
     "ejecutar_mision": ejecutar_mision,
     "recordar_a_fondo": recordar_a_fondo,

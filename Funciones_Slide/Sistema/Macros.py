@@ -87,6 +87,100 @@ def registrar(tipo, objetivo="", metodo=None, x=None, y=None):
         del _carrete[:-_MAX_CARRETE]
 
 
+# ── Grabar lo que hace MARCO (no lo que hace AIDEN) ──────────────────────────
+# El carrete de arriba guarda las acciones de AIDEN. Esto es lo complementario: Marco hace la
+# secuencia con su propio mouse y teclado, y AIDEN la aprende mirando. Sirve para lo que AIDEN aún
+# no sabe hacer solo, o para programas donde es más rápido enseñárselo que explicárselo.
+#
+# Lo grabado se guarda en coordenadas RELATIVAS a la ventana (igual que el resto del módulo), no en
+# píxeles absolutos: una macro en píxeles se rompe en cuanto la ventana se abre corrida.
+_grabacion = {"activa": False, "nombre": "", "pasos": [], "oyentes": [], "texto": ""}
+
+
+def _cerrar_texto():
+    """Junta las teclas sueltas acumuladas en un solo paso de escritura."""
+    t = _grabacion["texto"]
+    if t:
+        _grabacion["pasos"].append({"tipo": "escribir", "objetivo": t, "ventana": ""})
+        _grabacion["texto"] = ""
+
+
+def _al_hacer_clic(x, y, boton, presionado):
+    if not presionado or not _grabacion["activa"]:
+        return
+    _cerrar_texto()
+    titulo, (izq, arr, ancho, alto) = _ventana_activa()
+    tipo = "clic_derecho" if str(boton).endswith("right") else "clic"
+    _grabacion["pasos"].append({
+        "tipo": tipo, "objetivo": "", "metodo": "grabado", "ventana": titulo,
+        "rel": [round((x - izq) / ancho, 4), round((y - arr) / alto, 4)],
+    })
+
+
+def _al_teclear(tecla):
+    if not _grabacion["activa"]:
+        return
+    nombre = getattr(tecla, "name", None)
+    if nombre == "esc":
+        detener_grabacion_usuario()          # freno de mano: ESC corta la grabación
+        return False
+    caracter = getattr(tecla, "char", None)
+    if caracter:
+        _grabacion["texto"] += caracter
+        return
+    if nombre in ("space",):
+        _grabacion["texto"] += " "
+        return
+    _cerrar_texto()
+    if nombre in ("enter", "tab", "backspace", "delete", "up", "down", "left", "right"):
+        _grabacion["pasos"].append({"tipo": "atajo", "objetivo": nombre, "ventana": ""})
+
+
+def iniciar_grabacion_usuario(nombre):
+    """Empieza a mirar el mouse y el teclado de Marco para aprender una secuencia."""
+    if _grabacion["activa"]:
+        return f"Ya estoy grabando «{_grabacion['nombre']}», señor. Dígame cuándo paro."
+    try:
+        from pynput import mouse, keyboard
+    except Exception:
+        return ("No puedo grabar sus acciones, señor: falta la librería. Se instala con: "
+                "pip install pynput")
+    _grabacion.update({"activa": True, "nombre": nombre, "pasos": [], "texto": "", "oyentes": []})
+    try:
+        om = mouse.Listener(on_click=_al_hacer_clic)
+        ot = keyboard.Listener(on_press=_al_teclear)
+        om.start(); ot.start()
+        _grabacion["oyentes"] = [om, ot]
+    except Exception as e:
+        _grabacion["activa"] = False
+        return f"No pude empezar a grabar, señor: {e}"
+    return (f"Grabando «{nombre}», señor. Haga la secuencia con calma; cuando termine dígame que "
+            "pare, o pulse ESC.")
+
+
+def detener_grabacion_usuario():
+    """Cierra la grabación y guarda lo aprendido."""
+    if not _grabacion["activa"]:
+        return "No estaba grabando nada, señor."
+    _grabacion["activa"] = False
+    _cerrar_texto()
+    for o in _grabacion["oyentes"]:
+        try:
+            o.stop()
+        except Exception:
+            pass
+    _grabacion["oyentes"] = []
+    pasos, nombre = _grabacion["pasos"], _grabacion["nombre"]
+    if not pasos:
+        return f"No alcancé a ver ninguna acción, señor; no guardo «{nombre}» vacía."
+    guardadas = _cargar()
+    guardadas[nombre] = {"pasos": pasos, "creada": time.time(), "origen": "marco"}
+    if not _guardar_archivo(guardadas):
+        return "No pude guardar la macro en disco, señor."
+    return (f"Aprendido, señor. «{nombre}» quedó con {len(pasos)} pasos: {_describir(pasos)}. "
+            "Dígame 'ejecuta " + nombre + "' cuando la quiera.")
+
+
 def _cargar():
     try:
         if os.path.exists(_RUTA):
@@ -123,8 +217,8 @@ def _reproducir_paso(p):
     tipo, objetivo = p.get("tipo"), p.get("objetivo", "")
 
     # Teclado y scroll no dependen de dónde esté nada: se repiten tal cual.
-    if tipo in ("escribir", "atajo", "scroll", "cerrar_pestana", "seleccionar", "enfocar"):
-        return CP._despachar(tipo, objetivo)
+    if tipo in ("escribir", "atajo", "tecla", "scroll", "cerrar_pestana", "seleccionar", "enfocar"):
+        return CP._despachar("atajo" if tipo == "tecla" else tipo, objetivo)
 
     # Asegura que estemos en la ventana correcta antes de tocar nada.
     hwnd = _buscar_ventana(p.get("ventana", ""))
@@ -178,6 +272,14 @@ def macro(accion, nombre="", pasos=0):
     a = str(accion or "").strip().lower()
     nombre = str(nombre or "").strip()
     guardadas = _cargar()
+
+    if a.startswith("grab") or a.startswith("mira") or a.startswith("aprende_vien"):
+        if not nombre:
+            return "¿Con qué nombre grabo lo que va a hacer, señor?"
+        return iniciar_grabacion_usuario(nombre)
+
+    if a.startswith("deten") or a.startswith("para") or a.startswith("termina"):
+        return detener_grabacion_usuario()
 
     if a.startswith("list"):
         if not guardadas:
