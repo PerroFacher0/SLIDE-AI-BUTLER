@@ -161,3 +161,75 @@ def iniciar_ordenes(hablar):
             time.sleep(10)
 
     threading.Thread(target=_bucle, daemon=True).start()
+
+
+# ── HERRAMIENTA ÚNICA: todo lo que pasa DESPUÉS ──────────────────────────────
+# Antes esto estaba partido en dos que se pisaban: 'programar_orden' (recados con disparador) y
+# 'guardar_en_json' (tareas con hora). "En 20 minutos recuérdame X" encajaba en LAS DOS, y el modelo
+# tenía que adivinar. Lo que de verdad varía no es cuándo, sino QUÉ ocurre al cumplirse: si AIDEN
+# solo tiene que DECIR algo, o si tiene que HACER algo (mandar un WhatsApp, llamar). Eso es el
+# parámetro 'hacer'; el disparador es el mismo para ambos casos.
+
+def _es_hora(v):
+    import re
+    # \d{1,2} en los MINUTOS a propósito: el modelo puede escribir "9:5" para las nueve y cinco.
+    # Ser estricto aquí hacía que esa hora se rechazara como si no fuera una hora en absoluto.
+    return bool(re.fullmatch(r"\d{1,2}:\d{1,2}", str(v or "").strip()))
+
+
+def _a_hora_absoluta(cuando):
+    """'20' (minutos desde ahora) -> 'HH:MM'. Si ya es una hora, la deja igual."""
+    from datetime import datetime, timedelta
+    v = str(cuando or "").strip()
+    if _es_hora(v):
+        h, m = v.split(":")
+        return f"{int(h):02d}:{int(m):02d}"
+    if v.isdigit():
+        return (datetime.now() + timedelta(minutes=int(v))).strftime("%H:%M")
+    return None
+
+
+def programar(cuando="", recado="", hacer="recordar", contacto="", accion="crear"):
+    """HERRAMIENTA: deja algo listo para MÁS TARDE.
+      cuando   = minutos ('20'), una hora ('21:30'), o el nombre de una app ('chrome' = cuando la abra)
+      recado   = qué decir (recordatorio) o qué mandar (si es un WhatsApp)
+      hacer    = 'recordar' (por defecto, AIDEN lo dice) | 'whatsapp' | 'llamar' | 'colgar'
+      contacto = a quién, solo para whatsapp/llamar
+      accion   = crear (por defecto) | listar | cancelar"""
+    a = _norm(accion) or "crear"
+    h = _norm(hacer) or "recordar"
+
+    if a in ("listar", "cancelar"):
+        return programar_orden(accion=a, recado=recado)
+
+    cuando = str(cuando or "").strip()
+    if not cuando:
+        return "¿Para cuándo lo dejo, señor?"
+
+    # Solo DECIR algo -> recado condicional (admite disparador por tiempo y por app).
+    if h.startswith("record") or h.startswith("avis") or h.startswith("dec"):
+        if not recado:
+            return "¿Qué le recuerdo, señor?"
+        tipo = "tiempo" if (cuando.isdigit() or _es_hora(cuando)) else "app"
+        return programar_orden(tipo=tipo, valor=cuando, recado=recado, accion="crear")
+
+    # HACER algo (mandar/llamar) -> tarea con hora absoluta.
+    hora = _a_hora_absoluta(cuando)
+    if hora is None:
+        return ("Para mandar un mensaje o llamar necesito una hora o unos minutos, señor, "
+                "no una app como disparador.")
+    mapa = {"whatsapp": "WHATSAPP", "wpp": "WHATSAPP", "mensaje": "WHATSAPP",
+            "llamar": "LLAMAR", "llamada": "LLAMAR", "colgar": "COLGAR"}
+    clave = next((v for k, v in mapa.items() if h.startswith(k)), None)
+    if clave is None:
+        return f"No sé qué es «{hacer}», señor (puedo recordar, whatsapp, llamar o colgar)."
+    if clave in ("WHATSAPP", "LLAMAR") and not contacto:
+        return "¿A quién, señor?"
+
+    from Funciones_Slide.Productividad.Gestion_datos import guardar_en_json
+    guardar_en_json(clave, contacto, recado, hora)
+    if clave == "WHATSAPP":
+        return f"Listo, señor: a las {hora} le mando el mensaje a {contacto}."
+    if clave == "LLAMAR":
+        return f"Listo, señor: a las {hora} llamo a {contacto}."
+    return f"Listo, señor: a las {hora} cuelgo."

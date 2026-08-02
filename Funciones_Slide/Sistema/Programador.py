@@ -179,11 +179,21 @@ def ejecutar_proyecto(nombre="", archivo=""):
         return f"No pude ejecutar el proyecto, señor: {e}"
 
 
-def proyecto(accion="crear", instruccion="", nombre="", archivo=""):
-    """HERRAMIENTA unificada de proyectos. accion 'crear' (por defecto) construye un proyecto con
-    Claude Code a partir de 'instruccion'; accion 'ejecutar' corre el código de un proyecto ya creado.
-    Reemplaza crear_proyecto + ejecutar_proyecto sin perder nada."""
+def proyecto(accion="crear", instruccion="", nombre="", archivo="", verificar=False):
+    """HERRAMIENTA unificada de proyectos construidos por Claude Code.
+      accion='crear'    -> lo construye a partir de 'instruccion'.
+      accion='ejecutar' -> corre el código de uno ya creado.
+      verificar=True    -> además de construirlo, lo EJECUTA para comprobar que de verdad funciona
+                           y se autocorrige si falla. Para encargos grandes que deben quedar
+                           andando, no solo escritos.
+
+    'verificar' era antes una herramienta entera aparte, 'ejecutar_mision', que se disputaba con
+    esta cada "hazme un programa que...". Las dos construían con Claude Code; la única diferencia
+    real era si después se comprobaba el resultado. Eso es una casilla, no otra herramienta."""
     a = str(accion or "").strip().lower()
     if a in ("ejecutar", "correr", "corre", "run", "abrir"):
         return ejecutar_proyecto(nombre, archivo)
+    if verificar:
+        from Funciones_Slide.Sistema.Misiones import ejecutar_mision
+        return ejecutar_mision(instruccion, nombre)
     return crear_proyecto(instruccion, nombre)

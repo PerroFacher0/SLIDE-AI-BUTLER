@@ -30,10 +30,14 @@ TEMPERATURA = 0.4
 
 # Herramientas que NO puede usar de forma proactiva (irreversibles / externas / peligrosas).
 _PROHIBIDAS = {
-    "Enviar_mensaje_Whatsapp", "llamada_whatsapp", "colgar", "contestar_llamada",
+    # OJO al mantener esta lista: son NOMBRES DE HERRAMIENTA. Si una se renombra o se fusiona y
+    # aquí queda el nombre viejo, la nueva pasa a estar PERMITIDA sin que nada falle — el agujero
+    # se abre en silencio. 'enviar_mensaje' cubre ahora WhatsApp, Discord y correo de una vez, así
+    # que es aún más importante que esté; 'proyecto' cubre lo que antes era 'ejecutar_mision'.
+    "enviar_mensaje", "llamada_whatsapp", "colgar", "contestar_llamada",
     "controlar_energia", "cerrar_aplicacion", "Salir", "Auto_Modificacion",
     "proyecto", "pedir_a_claude_code", "dictar", "control_ventana",
-    "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "ejecutar_mision", "investigar",
+    "Abrir_Videos_Youtube", "modo_gaming", "controlar_pantalla", "investigar",
     "ejecutar_en_pc",   # la llave maestra NUNCA se usa sola: solo cuando Marco lo pide
     "navegar_web",      # navegar/comprar/formularios: NUNCA sin que Marco lo pida explícitamente
     "que_esta_sonando", # escucha audio del sistema (puede ser privado): solo si Marco lo pide

@@ -114,3 +114,32 @@ def Auto_Modificacion(nombre_habilidad, instruccion):
             "Le aviso en cuanto la tenga lista.")
 
 
+
+
+def enviar_mensaje(canal, destino, mensaje, asunto=""):
+    """HERRAMIENTA única para escribirle a alguien, por el canal que sea.
+      canal = 'whatsapp' | 'discord' | 'correo'
+      destino = a quién (contacto, usuario/canal de Discord, o dirección de email)
+      mensaje = qué decirle;  asunto = solo para correo (redáctalo tú si Marco no lo dio).
+
+    Antes había tres herramientas casi idénticas — WhatsApp, Discord y correo — que compartían
+    hasta el 23% del vocabulario de sus descripciones ("mándale a X diciendo..."). La intención de
+    Marco es siempre la misma, ESCRIBIRLE A ALGUIEN; lo único que cambia es por dónde sale. Eso es
+    un parámetro. Tres herramientas casi iguales solo le dan al modelo tres formas de equivocarse."""
+    c = str(canal or "").strip().lower()
+    destino = str(destino or "").strip()
+    mensaje = str(mensaje or "").strip()
+    if not destino:
+        return "¿A quién le escribo, señor?"
+    if not mensaje:
+        return "¿Qué le digo, señor?"
+
+    if "discord" in c:
+        from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
+        return Enviar_mensaje_Discord(destino, mensaje)
+    if "correo" in c or "mail" in c or "email" in c:
+        from Funciones_Slide.Info.Agenda import enviar_correo
+        return enviar_correo(destino, asunto or "(sin asunto)", mensaje)
+    if "whats" in c or "wpp" in c or not c:
+        return Enviar_mensaje_Whatsapp(destino, mensaje)
+    return (f"No sé enviar por «{canal}», señor. Puedo por WhatsApp, Discord o correo.")

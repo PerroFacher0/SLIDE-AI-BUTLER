@@ -168,6 +168,18 @@ def mover_o_copiar(origen, destino_carpeta, mover=False):
         return False, f"error del sistema de archivos: {e}"
 
 
+def _abrir_archivo(nombre):
+    """Busca un archivo por nombre en las carpetas de Marco y ABRE el primero que aparezca."""
+    from Funciones_Slide.Sistema.Control_PC import buscar_archivo
+    return buscar_archivo(nombre)
+
+
+def _abrir_carpeta(nombre):
+    """Abre una carpeta en el Explorador de Windows."""
+    from Funciones_Slide.Sistema.Control_PC import abrir_carpeta
+    return abrir_carpeta(nombre)
+
+
 def gestionar_archivos(accion, patron="", origen="", destino="", raiz=""):
     """HERRAMIENTA: EJECUTOR DE SISTEMA PROFUNDO — busca, lee metadatos, mueve o copia archivos en
     CUALQUIER parte del disco (no solo Descargas/Documentos), directo por Python, SIN abrir el
@@ -199,7 +211,15 @@ def gestionar_archivos(accion, patron="", origen="", destino="", raiz=""):
             if ok:
                 return f"{verbo} «{os.path.basename(origen)}» a {resultado}, señor."
             return f"No pude {accion} el archivo, señor: {resultado}"
-        return f"No reconozco la acción «{accion}», señor (uso: buscar/metadatos/mover/copiar)."
+        # ABRIR: antes vivían aparte como 'buscar_archivo' y 'abrir_carpeta'. Comparten con esta
+        # el mismo vocabulario de siempre (descargas, documentos, escritorio) y por tanto competían
+        # por cada petición sobre archivos. Todo lo de archivos y carpetas entra por aquí.
+        if accion in ("abrir", "abrir_archivo"):
+            return _abrir_archivo(patron or origen)
+        if accion in ("abrir_carpeta", "carpeta"):
+            return _abrir_carpeta(patron or origen or destino)
+        return (f"No reconozco la acción «{accion}», señor "
+                "(uso: buscar/abrir/abrir_carpeta/metadatos/mover/copiar).")
     except Exception as e:
         # Red de seguridad final: NINGUNA excepción inesperada debe crashear el turno de voz.
         return f"Algo salió mal gestionando archivos, señor: {e}"

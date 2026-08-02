@@ -50,6 +50,27 @@ def _guardar(datos):
         pass
 
 
+def protocolo(accion="activar", nombre="", pasos=""):
+    """HERRAMIENTA única de protocolos (escenas que cambian varias cosas a la vez).
+      accion='activar' -> dispara uno: 'cine', 'buenas noches', 'concentración', 'normal', o
+                          cualquiera que Marco haya enseñado.
+      accion='crear'   -> Marco ENSEÑA una rutina nueva ('crea un protocolo modo estudio: cierra
+                          YouTube, abre Notion y pon lo-fi'). Queda guardada para siempre.
+      accion='borrar'  -> la elimina.    accion='listar' -> dice cuáles hay.
+
+    Antes eran dos herramientas, 'activar_protocolo' y 'crear_protocolo'. La herramienta 'macro' —
+    que hace exactamente lo mismo con otra clase de rutina — ya vivía en UNA sola con acciones
+    guardar/ejecutar/listar/borrar. Esto solo pone los protocolos en el mismo molde."""
+    a = str(accion or "activar").strip().lower()
+    if a.startswith("crear") or a.startswith("enseñ") or a.startswith("ensen") or a.startswith("aprend"):
+        return crear_protocolo(nombre, pasos)
+    if a.startswith("borr") or a.startswith("elimin"):
+        return crear_protocolo(nombre, eliminar=True)
+    if a.startswith("list"):
+        return _listar()
+    return activar_protocolo(nombre)
+
+
 def crear_protocolo(nombre, pasos="", eliminar=False):
     """HERRAMIENTA: Marco te ENSEÑA una rutina con nombre ('crea un protocolo modo estudio: ...').
     Se guarda para siempre; luego la activa diciendo el nombre. eliminar=True la borra."""

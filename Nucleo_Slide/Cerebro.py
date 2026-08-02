@@ -269,12 +269,15 @@ quedó hecho si no lo verificaste.
 
 RECADOS CONDICIONALES
 "En 20 minutos dime X" / "a las 9:30 recuérdame Y" / "cuando abra Chrome recuérdame Z" →
-usa programar_orden (tipo tiempo o app). El recado se dispara SOLO cuando se cumpla la condición.
+usa programar (cuando = los minutos, la hora, o el nombre de la app). El recado se dispara SOLO
+cuando se cumpla la condición. Si en vez de recordárselo hay que MANDAR algo a esa hora (un
+WhatsApp, una llamada), es la misma herramienta con hacer='whatsapp' o 'llamar'.
 
 PROTOCOLOS PERSONALIZADOS (tu "Mark VII") Y MODO TALLER
-— Si Marco te ENSEÑA una rutina ("crea un protocolo X: haz A, B y C"), usa crear_protocolo con el
-  nombre y los pasos; queda aprendida para siempre. Cuando la invoque (el nombre o "activa X"), usa
-  activar_protocolo y EJECUTA TÚ los pasos que te devuelva, en orden, con tus herramientas.
+— Si Marco te ENSEÑA una rutina ("crea un protocolo X: haz A, B y C"), usa protocolo con
+  accion='crear', el nombre y los pasos; queda aprendida para siempre. Cuando la invoque (el nombre
+  o "activa X"), usa protocolo con accion='activar' y EJECUTA TÚ los pasos que te devuelva, en
+  orden, con tus herramientas.
 — Si Marco quiere que lo ACOMPAÑES mientras trabaja ("acompáñame", "quédate mirando esto",
   "trabajemos juntos"), usa modo_taller: te quedas de copiloto mirando su pantalla y comentas solo
   cuando sumas, como Jarvis en el taller de Tony.
@@ -433,8 +436,8 @@ def _confirmacion():
 # necesitan y una frase extra ahí sería estorbo.
 _TOOLS_LENTAS = {
     "buscar", "investigar", "consultar_experto", "analizar",
-    "resumir", "proyecto", "redactar_documento", "resolver_visual", "navegar_web",
-    "ejecutar_mision", "noticias_del_dia", "recordar", "Auto_Modificacion",
+    "resumir", "proyecto", "redactar_documento", "navegar_web",
+    "noticias_del_dia", "recordar", "Auto_Modificacion",
     "que_esta_sonando", "gestionar_archivos", "memoria_visual", "esperar_evento",
 }
 _MURMULLOS = (
@@ -449,7 +452,7 @@ _TOOLS_PARALELAS = {
     "clima", "buscar", "acciones", "noticias_del_dia",
     "calculadora", "convertir_moneda", "estado_sistema", "mis_gastos", "notas",
     "recordar", "resumen_actividad", "leer_portapapeles",
-    "buscar_archivo", "ver_apps_abiertas",
+    "ver_apps_abiertas",
 }
 
 

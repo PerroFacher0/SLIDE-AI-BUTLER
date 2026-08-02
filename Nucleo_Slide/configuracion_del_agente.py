@@ -1,5 +1,4 @@
-from Funciones_Slide.Comunicacion.Funciones_Variadas import Enviar_mensaje_Whatsapp, llamada_whatsapp, colgar, Auto_Modificacion
-from Funciones_Slide.Productividad.Gestion_datos import guardar_en_json
+from Funciones_Slide.Comunicacion.Funciones_Variadas import enviar_mensaje, llamada_whatsapp, colgar, Auto_Modificacion
 from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Apps, Abrir_Videos_Youtube, Salir
 from Funciones_Slide.Sistema.Funciones_Sistema import cerrar_aplicacion, ver_apps_abiertas, clima, buscar, leer_portapapeles, control_musica, control_volumen, estado_sistema
 from Nucleo_Slide.Memoria import memoria
@@ -7,7 +6,7 @@ from Funciones_Slide.Info.Vision import analizar
 from Funciones_Slide.Info.Finanzas import acciones
 from Funciones_Slide.Productividad.Notas import notas
 from Funciones_Slide.Comunicacion.Llamadas import contestar_llamada
-from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, buscar_archivo
+from Funciones_Slide.Sistema.Control_PC import dictar, control_ventana, controlar_energia, tomar_captura
 from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
 from Nucleo_Slide.Cancelacion import cancelar
 from Funciones_Slide.Sistema.Macros import macro
@@ -17,23 +16,20 @@ from Nucleo_Slide.Memoria_Visual import memoria_visual
 from Funciones_Slide.Sistema.Vigilante_Eventos import esperar_evento
 from Funciones_Slide.Sistema.Hardware_Externo import hardware
 from Funciones_Slide.Productividad.Metas import gestionar_metas
-from Funciones_Slide.Sistema.Misiones import ejecutar_mision
 from Nucleo_Slide.Memoria_RAG import recordar
 from Funciones_Slide.Info.Investigacion import investigar
 from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
-from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_protocolo
+from Funciones_Slide.Productividad.Protocolos import protocolo
 from Funciones_Slide.Sistema.Taller import modo_taller
-from Funciones_Slide.Productividad.Ordenes_Condicionales import programar_orden
+from Funciones_Slide.Productividad.Ordenes_Condicionales import programar
 from Funciones_Slide.Sistema.Control_Total import ejecutar_en_pc
-from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy, enviar_correo
+from Funciones_Slide.Info.Agenda import revisar_correo, agenda_hoy
 from Funciones_Slide.Sistema.Sesion import restaurar_sesion
-from Funciones_Slide.Comunicacion.Discord import Enviar_mensaje_Discord
 from Funciones_Slide.Info.Web import abrir_web
 from Funciones_Slide.Sistema.Navegador_Web import navegar_web
 from Funciones_Slide.Sistema.Escucha_Sistema import que_esta_sonando
 from Funciones_Slide.Sistema.Gestor_Archivos import gestionar_archivos
 from Funciones_Slide.Info.Redactor import redactar_documento
-from Funciones_Slide.Info.Estudio import resolver_visual
 from Funciones_Slide.Info.Bitacora import resumen_actividad
 from Funciones_Slide.Sistema.Modos import modo_gaming
 from Funciones_Slide.Info.Documentos import resumir
@@ -47,25 +43,37 @@ from Funciones_Slide.Sistema.Programador import proyecto
 
 tools = [
     {
-        "type": "function",
-        "function": {
-            "name": "Enviar_mensaje_Whatsapp",
-            "description": "Envía un mensaje de WhatsApp de forma INMEDIATA a un contacto específico.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre_contacto": {
-                        "type": "string",
-                        "description": "El nombre del contacto al que se enviará el mensaje (ej. MAMA, TITO, JOSHUA)."
-                    },
-                    "mensaje": {
-                        "type": "string",
-                        "description": "El contenido del mensaje que se va a enviar."
+            "type": "function",
+            "function": {
+                    "name": "enviar_mensaje",
+                    "description": "Le ESCRIBE a alguien, por el canal que Marco indique. canal='whatsapp' (el mas habitual), 'discord' o 'correo'. Usala para 'mandale a X diciendo...', 'escribele a X en Discord que...', 'mandale un correo a mi profesor...'. Tu separas a QUIEN va (destino) de QUE se dice (mensaje), y si es correo REDACTAS tu un asunto adecuado. Para LLAMAR usa llamada_whatsapp; para LEER el correo usa revisar_correo; para mandarlo MAS TARDE usa programar.",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "canal": {
+                                            "type": "string",
+                                            "description": "whatsapp | discord | correo"
+                                    },
+                                    "destino": {
+                                            "type": "string",
+                                            "description": "A quien: nombre del contacto (MAMA, TITO...), usuario o canal de Discord, o direccion de correo."
+                                    },
+                                    "mensaje": {
+                                            "type": "string",
+                                            "description": "El contenido del mensaje."
+                                    },
+                                    "asunto": {
+                                            "type": "string",
+                                            "description": "Solo para correo: el asunto. Redactalo tu si Marco no lo dijo."
+                                    }
+                            },
+                            "required": [
+                                    "canal",
+                                    "destino",
+                                    "mensaje"
+                            ]
                     }
-                },
-                "required": ["nombre_contacto", "mensaje"]
             }
-        }
     },
     {
         "type": "function",
@@ -151,36 +159,7 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "guardar_en_json",
-            "description": "Programa una tarea, recordatorio, mensaje o llamada para el FUTURO (ej. 'en 15 minutos'). Calcula la hora sumando los minutos solicitados a tu hora actual.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "accion": {
-                        "type": "string",
-                        "description": "La acción a realizar. Solo puede ser: WHATSAPP, LLAMAR, COLGAR o NOTIFICAR."
-                    },
-                    "target": {
-                        "type": "string",
-                        "description": "El contacto objetivo (ej. MAMA) o 'Yo' si es un recordatorio personal."
-                    },
-                    "info": {
-                        "type": "string",
-                        "description": "El contenido del mensaje o el recordatorio."
-                    },
-                    "hora": {
-                        "type": "string",
-                        "description": "La hora calculada en el futuro con el formato exacto DD/MM HH:MM (ej. 08/03 15:30)."
-                    }
-                },
-                "required": ["accion", "target", "info", "hora"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "Salir",
@@ -276,35 +255,31 @@ tools = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "analizar",
-            "description": "AIDEN VE y analiza (describe) lo que hay delante. fuente 'pantalla' (por defecto) mira la PANTALLA del PC (un texto, un error, algo que Marco muestra); fuente 'camara' mira por la CÁMARA (el entorno, un objeto). Úsala cuando Marco pregunte qué ves, que mires/observes algo, o pida tu opinión. Para RESOLVER a fondo un problema/ejercicio de la pantalla, usa resolver_visual (no esta).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "fuente": {"type": "string", "description": "pantalla (por defecto) | camara"},
-                    "consulta": {"type": "string", "description": "Lo que Marco quiere saber sobre lo que ves (opcional)."}
-                },
-                "required": []
+            "type": "function",
+            "function": {
+                    "name": "analizar",
+                    "description": "AIDEN MIRA lo que Marco tiene delante. fuente 'pantalla' (por defecto) mira la PANTALLA del PC; fuente 'camara' mira por la CAMARA (el entorno, un objeto). Con a_fondo=false solo lo DESCRIBE, rapido ('¿que ves?', 'mira esto', '¿que opinas de esto?'). Con a_fondo=true lo RESUELVE razonando paso a paso con el cerebro experto: usa a_fondo=true cuando Marco diga 'resuelve esto', 'ayudame con este problema', 'explicame esto a fondo', o cuando sea un ejercicio de mates/fisica, un error de codigo o un texto dificil. NO la uses para GUARDAR una captura (eso es tomar_captura) ni para recuperar algo que YA no esta en pantalla (eso es memoria_visual).",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "fuente": {
+                                            "type": "string",
+                                            "description": "pantalla (por defecto) | camara"
+                                    },
+                                    "consulta": {
+                                            "type": "string",
+                                            "description": "Que quiere saber Marco sobre lo que se ve. Opcional."
+                                    },
+                                    "a_fondo": {
+                                            "type": "boolean",
+                                            "description": "true = resolver/explicar a fondo con el experto (tarda mas). false (por defecto) = solo describir."
+                                    }
+                            },
+                            "required": []
+                    }
             }
-        }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "buscar_archivo",
-            "description": "Busca un archivo por su nombre en las carpetas de Marco (Descargas, Documentos, Escritorio, etc.) y abre el primero que encuentre. Úsala cuando pida buscar o encontrar un archivo, documento, foto, etc.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre": {"type": "string", "description": "Nombre o parte del nombre del archivo a buscar."}
-                },
-                "required": ["nombre"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "resumen_actividad",
@@ -342,18 +317,31 @@ tools = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "activar_protocolo",
-            "description": "Activa un PROTOCOLO (escena que cambia varias cosas a la vez), estilo Jarvis. Disponibles: 'cine' (baja brillo, sube volumen, silencia interrupciones), 'buenas noches' (silencia y deja el equipo en calma), 'concentración' (sin notificaciones para estudiar/trabajar), 'normal' (desactiva todo). Úsala cuando Marco active un modo o ambiente.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre": {"type": "string", "description": "cine, buenas noches, concentración, o normal."}
-                },
-                "required": ["nombre"]
+            "type": "function",
+            "function": {
+                    "name": "protocolo",
+                    "description": "PROTOCOLOS: escenas que cambian varias cosas del PC a la vez, estilo Jarvis. accion='activar' dispara uno: 'cine' (baja brillo, sube volumen, silencia interrupciones), 'buenas noches', 'concentracion', 'normal' (restaura todo), o cualquiera que Marco haya enseñado. accion='crear' es cuando Marco te ENSEÑA una rutina nueva ('crea un protocolo modo estudio: cierra YouTube, abre Notion y pon lo-fi') — queda guardada para siempre y NO se ejecuta en ese momento. Tambien 'borrar' y 'listar'.",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "accion": {
+                                            "type": "string",
+                                            "description": "activar (por defecto) | crear | borrar | listar"
+                                    },
+                                    "nombre": {
+                                            "type": "string",
+                                            "description": "Como se llama el protocolo (ej. 'cine', 'modo estudio')."
+                                    },
+                                    "pasos": {
+                                            "type": "string",
+                                            "description": "Solo para crear: los pasos de la rutina, en lenguaje natural, separados por comas."
+                                    }
+                            },
+                            "required": [
+                                    "accion"
+                            ]
+                    }
             }
-        }
     },
     {
         "type": "function",
@@ -397,21 +385,7 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "abrir_carpeta",
-            "description": "Abre una carpeta del computador en el explorador. Úsala cuando Marco pida abrir sus descargas, documentos, escritorio, imágenes, música o videos.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre": {"type": "string", "description": "Carpeta: descargas, documentos, escritorio, imagenes, musica o videos."}
-                },
-                "required": ["nombre"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "control_ventana",
@@ -616,21 +590,37 @@ tools = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "proyecto",
-            "description": "Proyectos/programas REALES construidos por Claude Code. accion 'crear' (por defecto, con 'instruccion') delega a Claude Code que escriba los archivos completos en un sandbox ('créame', 'prográmame', 'hazme un programa que...'); tarda, corre en 2do plano y AIDEN avisa al terminar. accion 'ejecutar' corre el código de un proyecto ya creado ('ejecuta el proyecto', 'pruébalo'). NO para una función simple del propio AIDEN (eso es Auto_Modificacion) ni para tareas sobre el código de AIDEN (eso es pedir_a_claude_code).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "accion": {"type": "string", "description": "crear (por defecto) | ejecutar"},
-                    "instruccion": {"type": "string", "description": "Qué construir, en alto nivel (solo para crear)."},
-                    "nombre": {"type": "string", "description": "Nombre corto de la carpeta del proyecto. Opcional."},
-                    "archivo": {"type": "string", "description": "Archivo .py específico a correr (solo para ejecutar). Opcional."}
-                },
-                "required": []
+            "type": "function",
+            "function": {
+                    "name": "proyecto",
+                    "description": "Programas y proyectos REALES construidos por Claude Code en un sandbox del Escritorio. accion='crear' (por defecto) delega en Claude Code que escriba los archivos a partir de 'instruccion' ('creame', 'programame', 'hazme un programa que...'). Pon verificar=true cuando Marco quiera que QUEDE FUNCIONANDO y no solo escrito: AIDEN lo ejecuta, comprueba que corre y se autocorrige si falla — usalo para encargos grandes. accion='ejecutar' corre uno ya creado. Tarda; corre en segundo plano y AIDEN avisa al terminar. Para que AIDEN se programe una habilidad A SI MISMO usa Auto_Modificacion.",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "accion": {
+                                            "type": "string",
+                                            "description": "crear (por defecto) | ejecutar"
+                                    },
+                                    "instruccion": {
+                                            "type": "string",
+                                            "description": "Que debe construir, con el detalle que dio Marco."
+                                    },
+                                    "nombre": {
+                                            "type": "string",
+                                            "description": "Nombre corto de la carpeta del proyecto."
+                                    },
+                                    "archivo": {
+                                            "type": "string",
+                                            "description": "Solo para ejecutar: el archivo a correr. Opcional."
+                                    },
+                                    "verificar": {
+                                            "type": "boolean",
+                                            "description": "true = ademas de construirlo, ejecutarlo y autocorregirlo hasta que funcione."
+                                    }
+                            },
+                            "required": []
+                    }
             }
-        }
     },
     {
         "type": "function",
@@ -663,22 +653,7 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "ejecutar_mision",
-            "description": "MISIÓN autónoma: para una ORDEN GRANDE de construir algo ('hazme un programa/script/app que...'), AIDEN lo construye con Claude Code, VERIFICA que de verdad funciona, se autocorrige si falla y reporta. Úsala cuando Marco pida CREAR software de cierta envergadura y quiera que QUEDE funcionando. (Para una app simple o un proyecto sin verificar, está proyecto con accion crear.)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "objetivo": {"type": "string", "description": "Qué debe lograr la misión, en lenguaje natural y con el detalle que dio Marco."},
-                    "nombre": {"type": "string", "description": "Nombre corto para la misión/carpeta. Opcional."}
-                },
-                "required": ["objetivo"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "investigar",
@@ -706,23 +681,7 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "crear_protocolo",
-            "description": "Marco te ENSEÑA una rutina personalizada con nombre ('crea un protocolo modo estudio: cierra YouTube, abre Notion y pon lo-fi'). Queda guardada PARA SIEMPRE y luego se dispara con activar_protocolo. Con eliminar=true la borras. NO es para ejecutar nada ahora: solo aprende la rutina.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "nombre": {"type": "string", "description": "Nombre corto del protocolo (ej. 'modo estudio')."},
-                    "pasos": {"type": "string", "description": "Los pasos a ejecutar cuando se active, en lenguaje natural y en orden."},
-                    "eliminar": {"type": "boolean", "description": "true para BORRAR el protocolo (no hace falta 'pasos')."}
-                },
-                "required": ["nombre"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "modo_taller",
@@ -738,21 +697,37 @@ tools = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "programar_orden",
-            "description": "RECADOS CONDICIONALES de Marco: 'en 20 minutos dime que saque la pizza', 'a las 9:30 recuérdame llamar a mamá', 'cuando abra Chrome recuérdame revisar el correo'. Guardas el recado y AIDEN lo dice SOLO cuando la condición se cumpla. También listar y cancelar. Distinta de notas (eso es apuntar, esto es DISPARAR un aviso).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "tipo": {"type": "string", "description": "tiempo (minutos u hora) | app (cuando esa app esté en foco)"},
-                    "valor": {"type": "string", "description": "Si tiempo: minutos (ej. '20') u hora (ej. '21:30'). Si app: nombre de la app (ej. 'chrome')."},
-                    "recado": {"type": "string", "description": "QUÉ recordarle a Marco cuando dispare."},
-                    "accion": {"type": "string", "description": "crear (por defecto) | listar | cancelar (con recado = subcadena a borrar)"}
-                },
-                "required": []
+            "type": "function",
+            "function": {
+                    "name": "programar",
+                    "description": "Deja algo listo para MAS TARDE. 'cuando' es el disparador: minutos ('20'), una hora ('21:30'), o el nombre de una app ('chrome' = cuando la abra). Por defecto (hacer='recordar') AIDEN solo lo DICE cuando llegue el momento: 'en 20 minutos dime que saque la pizza', 'a las 9:30 recuerdame llamar a mama', 'cuando abra Chrome recuerdame revisar el correo'. Con hacer='whatsapp' o 'llamar' AIDEN lo EJECUTA solo a esa hora (necesita contacto). Tambien listar y cancelar. Distinta de notas (eso es apuntar, esto DISPARA) y de esperar_evento (eso se queda esperando AHORA, esto lo agenda).",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "cuando": {
+                                            "type": "string",
+                                            "description": "Minutos ('20'), hora ('21:30') o nombre de app ('chrome')."
+                                    },
+                                    "recado": {
+                                            "type": "string",
+                                            "description": "Que decirle a Marco, o que texto mandar si es un WhatsApp."
+                                    },
+                                    "hacer": {
+                                            "type": "string",
+                                            "description": "recordar (por defecto) | whatsapp | llamar | colgar"
+                                    },
+                                    "contacto": {
+                                            "type": "string",
+                                            "description": "A quien, solo para whatsapp/llamar."
+                                    },
+                                    "accion": {
+                                            "type": "string",
+                                            "description": "crear (por defecto) | listar | cancelar"
+                                    }
+                            },
+                            "required": []
+                    }
             }
-        }
     },
     {
         "type": "function",
@@ -775,7 +750,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "esperar_evento",
-            "description": "Se QUEDA ESPERANDO a que algo pase en el PC y avisa en cuanto ocurre. Usala cuando Marco diga 'avisame cuando termine de compilar', 'espera a que copie el enlace', 'dime cuando acabe de exportar', 'avisame cuando conecte el USB'. tipo='proceso_cierra' con filtro=nombre del programa es la mas util: espera a que ese programa TERMINE. NO la uses para recordatorios con hora (eso es programar_orden) ni para condiciones que ya se cumplieron (mira el estado directamente).",
+            "description": "Se QUEDA ESPERANDO a que algo pase en el PC y avisa en cuanto ocurre. Usala cuando Marco diga 'avisame cuando termine de compilar', 'espera a que copie el enlace', 'dime cuando acabe de exportar', 'avisame cuando conecte el USB'. tipo='proceso_cierra' con filtro=nombre del programa es la mas util: espera a que ese programa TERMINE. NO la uses para recordatorios con hora (eso es programar) ni para condiciones que ya se cumplieron (mira el estado directamente).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -807,7 +782,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "macro",
-            "description": "Convierte en MACRO reutilizable la secuencia que AIDEN acaba de hacer en pantalla, y la repite despues por su nombre. Usala cuando Marco diga 'guarda eso como X', 'aprendete eso', 'la proxima hazlo directo' (accion='guardar'), o cuando pida repetir algo aprendido: 'haz X', 'ejecuta la macro X' (accion='ejecutar'). Vale MUCHISIMO la pena: los pasos que costaron analisis visual quedan grabados y la repeticion es instantanea y gratis. NO la uses para tareas con hora (eso es programar_orden) ni para rutinas de ajustes del sistema (eso es crear_protocolo).",
+            "description": "Convierte en MACRO reutilizable la secuencia que AIDEN acaba de hacer en pantalla, y la repite despues por su nombre. Usala cuando Marco diga 'guarda eso como X', 'aprendete eso', 'la proxima hazlo directo' (accion='guardar'), o cuando pida repetir algo aprendido: 'haz X', 'ejecuta la macro X' (accion='ejecutar'). Vale MUCHISIMO la pena: los pasos que costaron analisis visual quedan grabados y la repeticion es instantanea y gratis. NO la uses para tareas con hora (eso es programar) ni para rutinas de ajustes del sistema (eso es protocolo).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -869,7 +844,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "cancelar",
-            "description": "FRENO DE EMERGENCIA: detiene lo que AIDEN este EJECUTANDO ahora mismo (un comando largo en el PC, una secuencia de clics, un ajuste visual). Usala cuando Marco diga 'para', 'detente', 'cancela', 'ya no', 'olvidalo' MIENTRAS algo esta corriendo. Marco tambien puede pararlo el mismo con Ctrl+Alt+P. NO la uses para cerrar el asistente (eso es Salir) ni para cancelar un recado programado (eso es programar_orden con accion='cancelar').",
+            "description": "FRENO DE EMERGENCIA: detiene lo que AIDEN este EJECUTANDO ahora mismo (un comando largo en el PC, una secuencia de clics, un ajuste visual). Usala cuando Marco diga 'para', 'detente', 'cancela', 'ya no', 'olvidalo' MIENTRAS algo esta corriendo. Marco tambien puede pararlo el mismo con Ctrl+Alt+P. NO la uses para cerrar el asistente (eso es Salir) ni para cancelar un recado agendado (eso es programar con accion='cancelar').",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -915,22 +890,7 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "Enviar_mensaje_Discord",
-            "description": "Envía un mensaje por Discord a una persona (DM) o canal. Úsala cuando Marco diga 'mándale a X por Discord...', 'escríbele a X en Discord diciendo...', 'dile a X en Discord que...'. TÚ separas el destino (a quién) y el mensaje.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "destino": {"type": "string", "description": "Nombre de la persona (DM) o del canal/servidor."},
-                    "mensaje": {"type": "string", "description": "El texto a enviar."}
-                },
-                "required": ["destino", "mensaje"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "abrir_web",
@@ -974,40 +934,41 @@ tools = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "gestionar_archivos",
-            "description": "EJECUTOR DE SISTEMA PROFUNDO: busca, lee metadatos, mueve o copia archivos en CUALQUIER parte del disco (no solo Descargas/Documentos), directo por Python, SIN abrir el Explorador de Windows. Prefiérela sobre controlar_pantalla para cualquier tarea de archivos/carpetas (más rápida, invisible, no depende de qué se vea en pantalla). accion='buscar' (patron[, raiz]); 'metadatos' (origen=ruta); 'mover'/'copiar' (origen=nombre o ruta del archivo, destino=carpeta o alias como 'appdata', 'mods de minecraft', 'escritorio', 'documentos', 'descargas'). Ej. 'pon ese archivo en la carpeta de mods de Minecraft' -> accion='mover', destino='mods de minecraft'.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "accion": {"type": "string", "description": "'buscar', 'metadatos', 'mover' o 'copiar'."},
-                    "patron": {"type": "string", "description": "Para 'buscar': texto que debe contener el nombre del archivo."},
-                    "origen": {"type": "string", "description": "Para 'metadatos'/'mover'/'copiar': nombre o ruta del archivo."},
-                    "destino": {"type": "string", "description": "Para 'mover'/'copiar': carpeta destino (ruta o alias)."},
-                    "raiz": {"type": "string", "description": "Opcional, para 'buscar': dónde buscar (por defecto toda la carpeta de usuario)."}
-                },
-                "required": ["accion"]
+            "type": "function",
+            "function": {
+                    "name": "gestionar_archivos",
+                    "description": "TODO lo de archivos y carpetas. accion='abrir': busca un archivo por nombre en las carpetas de Marco y lo ABRE ('abreme el pdf de la tarea', 'busca el archivo X'). accion='abrir_carpeta': abre una carpeta en el Explorador ('abre mis descargas'). accion='buscar': lo localiza en CUALQUIER parte del disco y te dice donde esta, SIN abrirlo. accion='metadatos': tamaño, tipo y fechas. accion='mover'/'copiar': lo mueve o copia entre carpetas, directo por Python y sin abrir el Explorador. Admite alias de voz ('mods de minecraft', 'appdata'). Prefierela sobre controlar_pantalla para cualquier tarea de archivos: es mas rapida y no depende de lo que se vea en pantalla.",
+                    "parameters": {
+                            "type": "object",
+                            "properties": {
+                                    "accion": {
+                                            "type": "string",
+                                            "description": "abrir | abrir_carpeta | buscar | metadatos | mover | copiar"
+                                    },
+                                    "patron": {
+                                            "type": "string",
+                                            "description": "Nombre o trozo del nombre del archivo (para abrir/buscar), o de la carpeta (para abrir_carpeta: descargas, documentos, escritorio, imagenes, musica, videos)."
+                                    },
+                                    "origen": {
+                                            "type": "string",
+                                            "description": "Archivo de partida (para metadatos/mover/copiar)."
+                                    },
+                                    "destino": {
+                                            "type": "string",
+                                            "description": "Carpeta de destino (para mover/copiar). Admite alias."
+                                    },
+                                    "raiz": {
+                                            "type": "string",
+                                            "description": "Donde buscar, si Marco lo acota. Opcional."
+                                    }
+                            },
+                            "required": [
+                                    "accion"
+                            ]
+                    }
             }
-        }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "enviar_correo",
-            "description": "ENVÍA un correo electrónico por Marco (distinto de revisar_correo, que solo LEE). Úsala cuando diga 'mándale un correo a X diciendo...', 'escríbele un email a...', 'envíale un correo a mi profesor...'. TÚ redactas un asunto adecuado y el mensaje. 'para' es la dirección de email o el nombre de un contacto guardado.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "para": {"type": "string", "description": "Dirección de correo (ej. 'profe@unal.edu.co') o nombre de un contacto guardado."},
-                    "asunto": {"type": "string", "description": "El asunto del correo (redáctalo tú, breve y claro)."},
-                    "mensaje": {"type": "string", "description": "El cuerpo del correo (redáctalo cortés y completo a partir de lo que pide Marco)."}
-                },
-                "required": ["para", "mensaje"]
-            }
-        }
-    },
-    {
+{
         "type": "function",
         "function": {
             "name": "redactar_documento",
@@ -1022,30 +983,14 @@ tools = [
             }
         }
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "resolver_visual",
-            "description": "Mira lo que Marco tiene en PANTALLA (o en la cámara) y lo RESUELVE/explica a fondo con el cerebro experto: un problema de mates/física, una pregunta, un texto difícil, un error de código. Úsala cuando diga 'resuelve esto', 'ayúdame con este problema', 'cómo resuelvo esto', 'explícame esto que tengo aquí'. Distinta de analizar (que solo describe).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "fuente": {"type": "string", "description": "pantalla (por defecto) | camara"},
-                    "consulta": {"type": "string", "description": "Opcional: la duda concreta de Marco."}
-                },
-                "required": []
-            }
-        }
-    }
 ]
 
 tools_map = {
-    "Enviar_mensaje_Whatsapp": Enviar_mensaje_Whatsapp,
+    "enviar_mensaje": enviar_mensaje,
     "llamada_whatsapp": llamada_whatsapp,
     "colgar": colgar,
     "Abrir_Apps": Abrir_Apps,
     "Abrir_Videos_Youtube": Abrir_Videos_Youtube,
-    "guardar_en_json": guardar_en_json,
     "Salir": Salir,
     "Auto_Modificacion": Auto_Modificacion,
     "control_volumen": control_volumen,
@@ -1059,13 +1004,11 @@ tools_map = {
     "notas": notas,
     "contestar_llamada": contestar_llamada,
     "dictar": dictar,
-    "abrir_carpeta": abrir_carpeta,
     "control_ventana": control_ventana,
     "resumen_actividad": resumen_actividad,
-    "buscar_archivo": buscar_archivo,
     "controlar_energia": controlar_energia,
     "tomar_captura": tomar_captura,
-    "activar_protocolo": activar_protocolo,
+    "protocolo": protocolo,
     "modo_gaming": modo_gaming,
     "resumir": resumir,
     "acciones": acciones,
@@ -1086,23 +1029,18 @@ tools_map = {
     "esperar_evento": esperar_evento,
     "hardware": hardware,
     "gestionar_metas": gestionar_metas,
-    "ejecutar_mision": ejecutar_mision,
     "recordar": recordar,
     "investigar": investigar,
     "mis_gastos": mis_gastos,
-    "crear_protocolo": crear_protocolo,
     "modo_taller": modo_taller,
-    "programar_orden": programar_orden,
+    "programar": programar,
     "ejecutar_en_pc": ejecutar_en_pc,
     "revisar_correo": revisar_correo,
     "agenda_hoy": agenda_hoy,
-    "enviar_correo": enviar_correo,
     "navegar_web": navegar_web,
     "que_esta_sonando": que_esta_sonando,
     "gestionar_archivos": gestionar_archivos,
     "restaurar_sesion": restaurar_sesion,
-    "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
     "abrir_web": abrir_web,
     "redactar_documento": redactar_documento,
-    "resolver_visual": resolver_visual,
 }

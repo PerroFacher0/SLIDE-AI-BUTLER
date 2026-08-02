@@ -72,11 +72,21 @@ def analizar_vision(consulta=""):
     return _describir_imagen(frame, instruccion)
 
 
-def analizar(fuente="pantalla", consulta=""):
-    """HERRAMIENTA unificada de visión: describe/analiza lo que AIDEN ve. fuente 'pantalla' (por
-    defecto) mira la PANTALLA; fuente 'camara' mira por la CÁMARA. Reemplaza analizar_pantalla +
-    analizar_vision sin perder nada. (Para RESOLVER un problema a fondo usa resolver_visual.)"""
+def analizar(fuente="pantalla", consulta="", a_fondo=False):
+    """HERRAMIENTA unificada de visión: mira lo que AIDEN tiene delante. fuente 'pantalla' (por
+    defecto) mira la PANTALLA; fuente 'camara' mira por la CÁMARA.
+
+    a_fondo=False -> lo DESCRIBE con el modelo rápido (qué hay, qué se ve, una opinión breve).
+    a_fondo=True  -> lo RESUELVE con el cerebro experto, razonando paso a paso (un problema de
+                     mates o física, un error de código, un texto difícil).
+
+    Antes esto eran dos herramientas con LOS MISMOS DOS PARÁMETROS — 'analizar' y 'resolver_visual' —
+    que compartían el 21% del vocabulario de sus descripciones. Lo único que las diferenciaba era
+    cuánto esfuerzo dedicarle a la misma imagen, y eso es un grado, no otra herramienta."""
     f = str(fuente or "pantalla").lower()
+    if a_fondo:
+        from Funciones_Slide.Info.Estudio import resolver_visual
+        return resolver_visual(fuente, consulta)
     if "cam" in f or "camara" in f or "ves" in f or "webcam" in f:
         return analizar_vision(consulta)
     return analizar_pantalla(consulta)
