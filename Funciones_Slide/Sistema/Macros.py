@@ -210,6 +210,51 @@ def _describir(pasos):
 
 
 # ── Reproducción ──────────────────────────────────────────────────────────────
+def _esperar_condicion(p):
+    """Espera a que algo ESTÉ LISTO antes de seguir, en vez de dormir un rato fijo y cruzar los
+    dedos. Una pausa de 2 segundos funciona el día que la PC va suelta y falla el día que va
+    cargada: el paso siguiente se ejecuta contra una ventana que aún no existe y la macro entera
+    se descarrilla en silencio. Aquí se espera a la CONDICIÓN, con un tope.
+
+    Devuelve (ok, mensaje)."""
+    from Nucleo_Slide import Cancelacion
+    from Funciones_Slide.Sistema import Control_Pantalla as CP
+
+    que = str(p.get("esperar") or "").strip().lower()
+    valor = str(p.get("objetivo") or "").strip()
+    try:
+        tope = max(1, min(120, int(p.get("timeout", 15))))
+    except (TypeError, ValueError):
+        tope = 15
+    if not valor:
+        return True, "espera sin objetivo (omitida)"
+
+    limite = time.time() + tope
+    while time.time() < limite:
+        if Cancelacion.cancelado():
+            return False, "cancelado por Marco"
+        try:
+            if que.startswith("proc"):
+                import psutil
+                objetivo_n = valor.lower().removesuffix(".exe")
+                for pr in psutil.process_iter(["name"]):
+                    if objetivo_n in (pr.info["name"] or "").lower().removesuffix(".exe"):
+                        return True, f"apareció el proceso {valor}"
+            elif que.startswith("vent"):
+                if _buscar_ventana(valor) is not None:      # el mismo buscador del reproductor
+                    return True, f"apareció la ventana «{valor}»"
+            elif que.startswith("elem"):
+                xy, _n = CP._ubicar_por_nombre(CP._norm(valor))   # sin gastar visión
+                if xy:
+                    return True, f"apareció «{valor}» en pantalla"
+            else:
+                return True, f"no sé esperar «{que}» (omitida)"
+        except Exception:
+            pass
+        time.sleep(0.2)
+    return False, f"esperé {tope} segundos a que apareciera «{valor}» y no apareció"
+
+
 def _reproducir_paso(p):
     """Ejecuta un paso por el camino más barato que siga siendo correcto."""
     from Funciones_Slide.Sistema import Control_Pantalla as CP
@@ -328,6 +373,17 @@ def macro(accion, nombre="", pasos=0):
             with Cancelacion.operacion(f"la macro «{nombre}»"):
                 for i, p in enumerate(lista, 1):
                     Cancelacion.revisar()
+                    # Un paso de ESPERA que no se cumple ABORTA la macro. Seguir después de que
+                    # algo no apareció es ejecutar a ciegas contra una pantalla que no es la que
+                    # la macro esperaba: en el mejor caso no hace nada, en el peor clica encima
+                    # de otra cosa.
+                    if p.get("tipo") == "esperar" or p.get("esperar"):
+                        ok, motivo = _esperar_condicion(p)
+                        if not ok:
+                            return (f"La macro «{nombre}» se detuvo en el paso {i}, señor: "
+                                    f"{motivo}.")
+                        hechos += 1
+                        continue
                     r = _reproducir_paso(p)
                     if "No encontré" in r or "No pude" in r or "omitido" in r:
                         fallos.append(f"paso {i} ({p.get('tipo')} {p.get('objetivo', '')[:20]})")

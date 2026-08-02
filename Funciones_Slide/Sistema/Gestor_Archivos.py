@@ -180,6 +180,95 @@ def _abrir_carpeta(nombre):
     return abrir_carpeta(nombre)
 
 
+def _resolver(nombre):
+    """Acepta una ruta completa o un nombre suelto; si es suelto, lo busca. Devuelve ruta o None."""
+    nombre = str(nombre or "").strip().strip('"')
+    if not nombre:
+        return None
+    if os.path.exists(nombre):
+        return os.path.abspath(nombre)
+    try:
+        hallados = buscar_en_disco(nombre, limite=1)   # el buscador que ya usa esta herramienta
+        return hallados[0]["ruta"] if hallados else None
+    except Exception:
+        return None
+
+
+def _a_la_papelera(que):
+    """Borrado REVERSIBLE. Un asistente que borra por voz tiene que poder equivocarse sin que sea
+    definitivo: a la Papelera, no al vacío. Si la librería no está, se avisa MUY claro antes de
+    borrar de verdad — nunca se hace un borrado irreversible haciéndolo pasar por uno reversible."""
+    ruta = _resolver(que)
+    if ruta is None:
+        return f"No encontré «{que}» para borrarlo, señor."
+    if _es_ruta_protegida(ruta):
+        return f"No toco «{ruta}», señor: está en una carpeta del sistema."
+    try:
+        from send2trash import send2trash
+    except Exception:
+        return (f"Encontré «{os.path.basename(ruta)}», señor, pero no puedo mandarlo a la papelera: "
+                "falta la librería (pip install send2trash). No lo borro de forma definitiva sin "
+                "que usted lo diga, porque eso no tendría vuelta atrás.")
+    try:
+        send2trash(ruta)
+        return f"Envié «{os.path.basename(ruta)}» a la papelera de reciclaje, señor."
+    except Exception as e:
+        return f"No pude enviarlo a la papelera, señor: {e}"
+
+
+def _comprimir(que, destino=""):
+    ruta = _resolver(que)
+    if ruta is None:
+        return f"No encontré «{que}» para comprimir, señor."
+    salida = str(destino or "").strip() or os.path.splitext(ruta)[0] + ".zip"
+    if not salida.lower().endswith(".zip"):
+        salida += ".zip"
+    if not os.path.isabs(salida):
+        salida = os.path.join(os.path.dirname(ruta), salida)
+    try:
+        import zipfile
+        n = 0
+        with zipfile.ZipFile(salida, "w", zipfile.ZIP_DEFLATED) as z:
+            if os.path.isdir(ruta):
+                for base, _dirs, files in os.walk(ruta):
+                    for f in files:
+                        completo = os.path.join(base, f)
+                        z.write(completo, os.path.relpath(completo, os.path.dirname(ruta)))
+                        n += 1
+            else:
+                z.write(ruta, os.path.basename(ruta))
+                n = 1
+        mb = os.path.getsize(salida) / 1e6
+        return (f"Comprimí {n} archivo(s) en «{os.path.basename(salida)}» ({mb:.1f} MB), señor: "
+                f"{salida}")
+    except Exception as e:
+        return f"No pude comprimirlo, señor: {e}"
+
+
+def _descomprimir(que, destino=""):
+    ruta = _resolver(que)
+    if ruta is None:
+        return f"No encontré «{que}» para descomprimir, señor."
+    if not ruta.lower().endswith(".zip"):
+        return f"«{os.path.basename(ruta)}» no es un .zip, señor."
+    carpeta = str(destino or "").strip() or os.path.splitext(ruta)[0]
+    if not os.path.isabs(carpeta):
+        carpeta = os.path.join(os.path.dirname(ruta), carpeta)
+    try:
+        import zipfile
+        with zipfile.ZipFile(ruta) as z:
+            # Se ignoran las entradas con rutas que se escapan de la carpeta destino ("../"): un zip
+            # puede traerlas y escribirían fuera de donde Marco cree que está extrayendo.
+            seguros = [m for m in z.namelist()
+                       if not os.path.isabs(m) and ".." not in m.replace("\\", "/").split("/")]
+            saltados = len(z.namelist()) - len(seguros)
+            z.extractall(carpeta, members=seguros)
+        cola = f" (salté {saltados} entrada(s) con rutas sospechosas)" if saltados else ""
+        return f"Extraje {len(seguros)} archivo(s) en {carpeta}, señor.{cola}"
+    except Exception as e:
+        return f"No pude descomprimirlo, señor: {e}"
+
+
 def gestionar_archivos(accion, patron="", origen="", destino="", raiz=""):
     """HERRAMIENTA: EJECUTOR DE SISTEMA PROFUNDO — busca, lee metadatos, mueve o copia archivos en
     CUALQUIER parte del disco (no solo Descargas/Documentos), directo por Python, SIN abrir el
@@ -218,8 +307,14 @@ def gestionar_archivos(accion, patron="", origen="", destino="", raiz=""):
             return _abrir_archivo(patron or origen)
         if accion in ("abrir_carpeta", "carpeta"):
             return _abrir_carpeta(patron or origen or destino)
-        return (f"No reconozco la acción «{accion}», señor "
-                "(uso: buscar/abrir/abrir_carpeta/metadatos/mover/copiar).")
+        if accion in ("borrar_seguro", "borrar", "eliminar", "papelera"):
+            return _a_la_papelera(origen or patron)
+        if accion in ("comprimir_zip", "comprimir", "zip"):
+            return _comprimir(origen or patron, destino)
+        if accion in ("descomprimir_zip", "descomprimir", "unzip", "extraer"):
+            return _descomprimir(origen or patron, destino)
+        return (f"No reconozco la acción «{accion}», señor (uso: buscar/abrir/abrir_carpeta/"
+                "metadatos/mover/copiar/borrar_seguro/comprimir_zip/descomprimir_zip).")
     except Exception as e:
         # Red de seguridad final: NINGUNA excepción inesperada debe crashear el turno de voz.
         return f"Algo salió mal gestionando archivos, señor: {e}"

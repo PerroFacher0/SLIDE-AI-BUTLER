@@ -184,3 +184,6 @@ rapidocr-onnxruntime
 pynput
 # puente serie con la placa ESP32/Arduino (LED de estado, reles, pantallita)
 pyserial
+# borrado REVERSIBLE: manda a la papelera en vez de destruir. Sin esto, gestionar_archivos
+# se niega a borrar en vez de hacerlo de forma definitiva.
+send2trash

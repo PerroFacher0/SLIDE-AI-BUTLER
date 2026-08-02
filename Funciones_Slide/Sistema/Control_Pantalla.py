@@ -553,17 +553,51 @@ def _enfocar_app(objetivo):
 
 
 def _escribir(texto):
-    if pyautogui is None:
-        return "No tengo control de teclado, señor."
+    """Escribe donde esté el cursor. Va por el PORTAPAPELES, no tecleando letra a letra.
+
+    `pyautogui.typewrite` no sabe teclear lo que no está en la distribución del teclado: las tildes,
+    la ñ y los saltos de línea salían mal o directamente se perdían — y AIDEN escribe en español
+    todo el rato. Pegar desde el portapapeles no tiene ese problema, es instantáneo por largo que
+    sea el texto, y además se restaura lo que Marco tuviera copiado.
+
+    La lógica no se duplica: `dictar` (Control_PC) ya la tenía resuelta, incluido el respaldo a
+    tecleo si el portapapeles falla. Aquí se reusa en vez de escribir una segunda versión peor."""
     texto = str(texto or "")
     if not texto:
         return "¿Qué quiere que escriba, señor?"
     try:
-        pyautogui.typewrite(texto, interval=0.02)   # escritura VISIBLE donde esté el cursor
-        _grabar("escribir", texto)
-        return f"Escrito, señor: {texto[:60]}"
+        from Funciones_Slide.Sistema.Control_PC import dictar
+        dictar(texto)
+    except Exception:
+        if pyautogui is None:
+            return "No tengo control de teclado, señor."
+        try:
+            pyautogui.typewrite(texto, interval=0.02)
+        except Exception as e:
+            return f"No pude escribir, señor: {e}"
+    _grabar("escribir", texto)
+    return f"Escrito, señor: {texto[:60]}"
+
+
+def _hover(objetivo):
+    """Deja el cursor QUIETO encima de algo, sin hacer clic. Hay menús y tooltips que solo se
+    despliegan al pasar el mouse por encima; sin esto había que clicar, que muchas veces hace otra
+    cosa distinta (o abre lo que no era)."""
+    if pyautogui is None:
+        return "No tengo control de mouse disponible, señor."
+    objetivo = str(objetivo or "").strip()
+    if not objetivo:
+        return "¿Sobre qué quiere que deje el cursor, señor?"
+    x, y, metodo, nombre = _ubicar(objetivo)      # el MISMO localizador que usa el clic
+    if x is None:
+        return f"No encontré «{objetivo}» en pantalla, señor."
+    try:
+        _mira(x, y, nombre)
+        pyautogui.moveTo(x, y, duration=0.3)
+        cola = "" if metodo == "estructura" else " (lo ubiqué viendo la pantalla)"
+        return f"Ahí tiene el cursor, señor: sobre «{nombre}».{cola}"
     except Exception as e:
-        return f"No pude escribir, señor: {e}"
+        return f"No pude mover el cursor, señor: {e}"
 
 
 def _scroll(objetivo):
@@ -625,6 +659,8 @@ def _despachar(a, objetivo):
         return _clic_en(objetivo, "doble")
     if "derech" in a or "secundario" in a or "right" in a:
         return _clic_en(objetivo, "derecho")
+    if "hover" in a or "posar" in a or "encima" in a or "pasa el mouse" in a or "sobrevol" in a:
+        return _hover(objetivo)
     if "senal" in a or "señal" in a or "muestra" in a or "indica" in a or "resalt" in a:
         return _senalar(objetivo)
     if "ajust" in a or "reglar" in a or "calibr" in a:

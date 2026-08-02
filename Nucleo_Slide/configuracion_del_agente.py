@@ -190,7 +190,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "cerrar_aplicacion",
-            "description": "Cierra una aplicacion abierta, por su nombre (ej. 'chrome', 'spotify'). Con forzar=true la MATA sin pedirle permiso: eso es lo que hay que hacer con una app COLGADA que no responde ('cierra Chrome a la fuerza', 'mata el proceso X'). Para cerrar solo una VENTANA o una PESTAÑA usa control_ventana o controlar_pantalla.",
+            "description": "Cierra una aplicacion abierta, por su nombre (ej. 'chrome', 'spotify'). Con forzar=true la MATA sin pedirle permiso: eso es lo que hay que hacer con una app COLGADA que no responde ('cierra Chrome a la fuerza', 'mata el proceso X'). Si la app tiene cambios sin guardar puede NO cerrarse y te lo dira: en ese caso preguntale a Marco si forzar (se pierde lo no guardado) antes de reintentar con forzar=true. Para cerrar solo una VENTANA o una PESTAÑA usa control_ventana o controlar_pantalla.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -626,11 +626,11 @@ tools = [
         "type": "function",
         "function": {
             "name": "controlar_pantalla",
-            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). Funciona en VARIOS MONITORES. USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, IR A UNA PESTANA del navegador por su nombre (accion 'clic' con el nombre de la pestana, ej. objetivo='GitHub'), SENALAR donde esta algo dibujandole un recuadro en pantalla SIN tocarlo (accion 'senalar', para '¿donde esta el boton de exportar?' — mucho mejor que describirlo con palabras), ARRASTRAR una cosa hasta otra, AJUSTAR un control continuo hasta lograr un resultado (slider de brillo/volumen/recorte: mira, mueve y VUELVE A MIRAR hasta que quede bien), ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ajustar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
+            "description": "Interaccion VISIBLE con la pantalla: AIDEN mueve el MOUSE y el TECLADO sobre lo que YA esta en pantalla, y Marco lo VE. El clic funciona con CUALQUIER cosa visible: primero busca el nombre en la estructura de accesibilidad (instantaneo) y, si no lo encuentra (juegos, apps de lienzo, iconos sin texto), UBICA el objetivo VIENDO la pantalla y hace clic ahi igual (un poco mas lento, pero cubre lo que sea). Funciona en VARIOS MONITORES. USA ESTA para: clic/doble clic/clic derecho en cualquier elemento, IR A UNA PESTANA del navegador por su nombre (accion 'clic' con el nombre de la pestana, ej. objetivo='GitHub'), HOVER (dejar el cursor encima SIN clicar, para desplegar un menu o un tooltip), SENALAR donde esta algo dibujandole un recuadro en pantalla SIN tocarlo (accion 'senalar', para '¿donde esta el boton de exportar?' — mucho mejor que describirlo con palabras), ARRASTRAR una cosa hasta otra, AJUSTAR un control continuo hasta lograr un resultado (slider de brillo/volumen/recorte: mira, mueve y VUELVE A MIRAR hasta que quede bien), ordenar ventanas en mosaico, traer una app al frente, teclear, hacer scroll, CERRAR UNA PESTANA (Ctrl+W), seleccionar, o un atajo de teclas. NO la uses para abrir una app nueva (usa Abrir_Apps), ni para minimizar/maximizar/cerrar la VENTANA entera (usa control_ventana), ni para pegar texto largo de golpe (usa dictar), ni para leer/analizar lo que hay en pantalla (usa analizar). accion posibles: clic, doble_clic, clic_derecho, arrastrar, ajustar, ordenar, enfocar, escribir, scroll, cerrar_pestana, seleccionar, atajo.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | senalar | arrastrar | ajustar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
+                    "accion": {"type": "string", "description": "clic | doble_clic | clic_derecho | hover | senalar | arrastrar | ajustar | ordenar | enfocar | escribir | scroll | cerrar_pestana | seleccionar | atajo"},
                     "objetivo": {"type": "string", "description": "Para clic/doble_clic/clic_derecho: la descripcion de lo que se ve (nombre del boton, nombre de la pestana, o una descripcion visual si no tiene nombre). Para arrastrar: 'X hasta Y'. Para ajustar: 'CONTROL hasta META' (ej. 'el slider de brillo hasta la mitad'). Para enfocar: nombre de la app. Para escribir: el texto. Para atajo: el combo (ej. 'control + s'). Para scroll: 'arriba'/'abajo'. Vacio para ordenar/seleccionar."}
                 },
                 "required": ["accion"]
@@ -733,7 +733,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "ejecutar_en_pc",
-            "description": "LLAVE MAESTRA: ejecuta un comando de PowerShell en el PC de Marco. Úsala para hacer CUALQUIER cosa que Windows permita y que NO tenga ya una herramienta propia: mover/copiar/renombrar/buscar archivos y carpetas, crear archivos, matar/listar procesos, cambiar ajustes del sistema, red (wifi, IP, ping), energía/apagado programado, tareas, registro, limpiar temporales, información del sistema, abrir cosas con parámetros, etc. TÚ compones el PowerShell correcto. Encadena varias acciones con ';'. Para cosas que YA tienen herramienta (música, volumen, apps comunes, clima, WhatsApp) usa esas. Reporta el resultado a Marco en lenguaje natural y breve.",
+            "description": "LLAVE MAESTRA: ejecuta un comando de PowerShell en el PC de Marco. Úsala para hacer CUALQUIER cosa que Windows permita y que NO tenga ya una herramienta propia: mover/copiar/renombrar/buscar archivos y carpetas, crear archivos, matar/listar procesos, cambiar ajustes del sistema, red (wifi, IP, ping), energía/apagado programado, tareas, registro, limpiar temporales, información del sistema, abrir cosas con parámetros, etc. TÚ compones el PowerShell correcto. Encadena varias acciones con ';'. Para cosas que YA tienen herramienta (música, volumen, apps comunes, clima, WhatsApp) usa esas. Reporta el resultado a Marco en lenguaje natural y breve. La CARPETA DE TRABAJO se recuerda entre llamadas: si un comando entra en una carpeta, el siguiente empieza ahi (las variables si se limpian). Si el comando abre una ventana, se te dice cual, para que puedas actuar sobre ella con controlar_pantalla.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -798,11 +798,11 @@ tools = [
         "type": "function",
         "function": {
             "name": "perifericos",
-            "description": "Hardware CONECTADO al PC, y el BRILLO de las pantallas. accion='brillo': sube, baja o fija el brillo de CUALQUIER monitor, el del portatil y los EXTERNOS (habla DDC/CI por el cable de video). Es la UNICA forma de tocar el brillo: 'sube el brillo', 'pon el brillo en 70', 'baja el brillo del monitor grande'. accion='audio': cambia POR DONDE suena el PC ('pasa el sonido a los audifonos'); sin objetivo, lista las salidas. accion='bateria': cuanta bateria les queda al mouse, teclado o audifonos inalambricos.",
+            "description": "Hardware CONECTADO al PC, y el BRILLO de las pantallas. accion='brillo': sube, baja o fija el brillo de CUALQUIER monitor, el del portatil y los EXTERNOS (habla DDC/CI por el cable de video). Es la UNICA forma de tocar el brillo: 'sube el brillo', 'pon el brillo en 70', 'baja el brillo del monitor grande'. accion='audio': cambia POR DONDE suena el PC ('pasa el sonido a los audifonos'); sin objetivo, lista las salidas. accion='volumen_app': volumen de UNA aplicacion sin tocar el resto ('bajale a Spotify', 'sube Chrome') — objetivo=nombre de la app, nivel=0-100; para el volumen GENERAL usa control_volumen. accion='bateria': cuanta bateria les queda al mouse, teclado o audifonos inalambricos.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "brillo | audio | bateria"},
+                    "accion": {"type": "string", "description": "brillo | audio | volumen_app | bateria"},
                     "objetivo": {"type": "string", "description": "Parte del nombre del dispositivo o monitor (ej. 'sony', 'audifonos'). Vacio = todos / listar."},
                     "nivel": {"type": "string", "description": "Solo para brillo: un numero 0-100, o 'subir'/'bajar' si Marco no dio cifra. Vacio para solo consultar como esta."}
                 },
@@ -937,13 +937,13 @@ tools = [
             "type": "function",
             "function": {
                     "name": "gestionar_archivos",
-                    "description": "TODO lo de archivos y carpetas. accion='abrir': busca un archivo por nombre en las carpetas de Marco y lo ABRE ('abreme el pdf de la tarea', 'busca el archivo X'). accion='abrir_carpeta': abre una carpeta en el Explorador ('abre mis descargas'). accion='buscar': lo localiza en CUALQUIER parte del disco y te dice donde esta, SIN abrirlo. accion='metadatos': tamaño, tipo y fechas. accion='mover'/'copiar': lo mueve o copia entre carpetas, directo por Python y sin abrir el Explorador. Admite alias de voz ('mods de minecraft', 'appdata'). Prefierela sobre controlar_pantalla para cualquier tarea de archivos: es mas rapida y no depende de lo que se vea en pantalla.",
+                    "description": "TODO lo de archivos y carpetas. accion='abrir': busca un archivo por nombre en las carpetas de Marco y lo ABRE ('abreme el pdf de la tarea', 'busca el archivo X'). accion='abrir_carpeta': abre una carpeta en el Explorador ('abre mis descargas'). accion='buscar': lo localiza en CUALQUIER parte del disco y te dice donde esta, SIN abrirlo. accion='metadatos': tamaño, tipo y fechas. accion='mover'/'copiar': lo mueve o copia entre carpetas. accion='borrar_seguro': lo manda a la PAPELERA (reversible; usala siempre en vez de borrar de verdad). accion='comprimir_zip'/'descomprimir_zip': lo empaqueta o lo extrae (origen=que, destino=donde). Admite alias de voz ('mods de minecraft', 'appdata'). Prefierela sobre controlar_pantalla para cualquier tarea de archivos: es mas rapida y no depende de lo que se vea en pantalla.",
                     "parameters": {
                             "type": "object",
                             "properties": {
                                     "accion": {
                                             "type": "string",
-                                            "description": "abrir | abrir_carpeta | buscar | metadatos | mover | copiar"
+                                            "description": "abrir | abrir_carpeta | buscar | metadatos | mover | copiar | borrar_seguro | comprimir_zip | descomprimir_zip"
                                     },
                                     "patron": {
                                             "type": "string",

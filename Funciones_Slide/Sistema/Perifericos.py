@@ -169,10 +169,63 @@ def bateria_perifericos():
 
 
 # ── Brillo REAL, también en monitores externos (DDC/CI) ──────────────────────
+def volumen_de_app(app, nivel):
+    """Sube o baja el volumen de UNA aplicación, sin tocar el del resto.
+
+    Windows lleva un mezclador por aplicación, pero no lo expone por teclado: control_volumen mueve
+    el volumen MAESTRO, así que "bájale a Spotify" bajaba todo, incluida la propia voz de AIDEN.
+    Esto habla con las sesiones de audio directamente."""
+    try:
+        from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
+        from comtypes import CoInitialize
+    except Exception:
+        return ("No tengo el control del mezclador de Windows, señor. Se activa con: "
+                "pip install pycaw")
+    buscado = _norm(app).removesuffix(".exe")
+    if not buscado:
+        return "¿A qué aplicación le cambio el volumen, señor?"
+    try:
+        n = max(0, min(100, int(float(nivel))))
+    except (TypeError, ValueError):
+        return "Dígame un número de 0 a 100, señor."
+
+    try:
+        CoInitialize()
+    except Exception:
+        pass
+    try:
+        sesiones = AudioUtilities.GetAllSessions()
+    except Exception as e:
+        return f"No pude leer el mezclador de Windows, señor: {e}"
+
+    tocadas, sonando = [], []
+    for s in sesiones:
+        if not s.Process:
+            continue
+        try:
+            nombre = s.Process.name()
+        except Exception:
+            continue
+        sonando.append(nombre)
+        if buscado in _norm(nombre).removesuffix(".exe"):
+            try:
+                s._ctl.QueryInterface(ISimpleAudioVolume).SetMasterVolume(n / 100.0, None)
+                tocadas.append(nombre)
+            except Exception:
+                continue
+    if tocadas:
+        return f"{'Bajé' if n < 50 else 'Puse'} el volumen de {tocadas[0]} al {n}%, señor."
+    if sonando:
+        return (f"No encontré a «{app}» sonando ahora mismo, señor. Están sonando: "
+                + ", ".join(sorted(set(sonando))[:6]))
+    return "Ahora mismo no hay ninguna aplicación reproduciendo audio, señor."
+
+
 def perifericos(accion="bateria", objetivo="", nivel=None):
     """HERRAMIENTA ÚNICA del hardware conectado.
       accion='brillo'  -> brillo de CUALQUIER monitor (nivel: 0-100, 'subir' o 'bajar')
       accion='audio'   -> por dónde suena el PC (objetivo vacío = listar salidas)
+      accion='volumen_app' -> volumen de UNA app (objetivo=nombre, nivel=0-100)
       accion='bateria' -> batería de mouse/teclado/audífonos inalámbricos
 
     El brillo llegó a tener TRES caminos: 'ajustar_brillo' (relativo, monitor principal),
@@ -181,6 +234,10 @@ def perifericos(accion="bateria", objetivo="", nivel=None):
     ellas simplemente no funcionaba en la pantalla grande. Ahora es este único camino, que habla
     DDC/CI y por tanto sirve igual para el portátil y para los externos."""
     a = _norm(accion)
+    # Antes que 'audio': "volumen_app" contiene... nada de audio, pero sí conviene mirarlo primero
+    # por si el modelo escribe "audio_app" o "volumen de app".
+    if "volumen" in a or "_app" in a or "mezclador" in a:
+        return volumen_de_app(objetivo, nivel)
     if a.startswith("audio") or "sonid" in a or "altavo" in a or "audifon" in a:
         return audio("cambiar" if objetivo else "listar", objetivo)
     if a.startswith("bril") or "monitor" in a or "pantalla" in a or "luz" in a:

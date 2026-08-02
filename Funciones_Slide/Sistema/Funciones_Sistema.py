@@ -1,3 +1,5 @@
+import time
+
 import psutil
 import requests
 from ctypes import cast, POINTER
@@ -94,20 +96,33 @@ def cerrar_aplicacion(nombre_app, forzar=False):
        return "¿Qué aplicación cierro, señor?"
    # Tolerante con el .exe: Marco dice "chrome", el proceso se llama "chrome.exe".
    buscado = nombre.lower().removesuffix(".exe")
-   encontrado = False
+   tocados = []
 
    for proceso in psutil.process_iter(['name']):
        try:
            actual = (proceso.info['name'] or "").lower().removesuffix(".exe")
            if actual == buscado:
                proceso.kill() if forzar else proceso.terminate()
-               encontrado = True
+               tocados.append(proceso.pid)
        except (psutil.NoSuchProcess, psutil.AccessDenied):
            continue   # ese proceso no se dejo, seguimos buscando el nuestro
 
-   if encontrado:
-       return f"Cerré {nombre}{' a la fuerza' if forzar else ''}, señor"
-   return f"No encontré {nombre} abierto, señor"
+   if not tocados:
+       return f"No encontré {nombre} abierto, señor"
+   if forzar:
+       return f"Cerré {nombre} a la fuerza, señor"
+
+   # COMPROBAR QUE DE VERDAD CERRÓ. terminate() solo PIDE a la aplicación que se cierre; si tiene
+   # un documento sin guardar, Word o Excel abren un "¿Desea guardar los cambios?" y se quedan ahí
+   # esperando una respuesta que nadie va a dar. Antes AIDEN decía "Cerré Word, señor" y Word
+   # seguía abierto: peor que fallar, porque Marco se queda con una idea falsa de lo que pasó.
+   time.sleep(1.2)
+   vivos = [p for p in tocados if psutil.pid_exists(p)]
+   if not vivos:
+       return f"Cerré {nombre}, señor"
+   return (f"{nombre} no se cerró del todo, señor: {len(vivos)} proceso(s) siguen abiertos, "
+           "probablemente esperando a que alguien conteste si guarda los cambios. Dígame si lo "
+           "fuerzo (y se pierde lo que no esté guardado) o prefiere revisarlo usted.")
 
 
 def ver_apps_abiertas():

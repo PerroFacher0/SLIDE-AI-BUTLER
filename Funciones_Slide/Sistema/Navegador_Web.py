@@ -558,11 +558,69 @@ _HERRAMIENTAS_WEB = [
      "parameters": {"type": "object", "properties": {"texto": {"type": "string"}}, "required": ["texto"]}}},
     {"type": "function", "function": {"name": "estado_pagina", "description": "Dice si la página cargó, si es una pantalla de pago final, y si hay un reto de verificación humana (CAPTCHA/Cloudflare) bloqueando.",
      "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "subir_archivo", "description": "Adjunta un archivo DEL PC a un formulario de la página (subir un currículum, una foto, un PDF).",
+     "parameters": {"type": "object", "properties": {"descripcion": {"type": "string", "description": "El botón/zona de subida, por si hay que pulsarlo."}, "ruta": {"type": "string", "description": "Nombre o ruta del archivo en el PC (ej. 'curriculum.pdf')."}}, "required": ["ruta"]}}},
+    {"type": "function", "function": {"name": "descargar_archivo", "description": "Pulsa un enlace/botón de descarga y guarda el archivo, devolviendo dónde quedó.",
+     "parameters": {"type": "object", "properties": {"descripcion": {"type": "string", "description": "El enlace o botón de descarga."}}, "required": ["descripcion"]}}},
     {"type": "function", "function": {"name": "pedir_a_marco", "description": "Le pregunta algo a Marco AL CELULAR y espera su respuesta. Úsala SOLO para lo que es imposible saber desde aquí: un código de verificación de dos pasos (2FA) que le llegó por SMS o a una app, o un dato personal que falta en un formulario. Jamás para saltarse un CAPTCHA ni un pago.",
      "parameters": {"type": "object", "properties": {"pregunta": {"type": "string"}}, "required": ["pregunta"]}}},
     {"type": "function", "function": {"name": "terminar", "description": "Termina la tarea de navegación: da el reporte final para Marco.",
      "parameters": {"type": "object", "properties": {"reporte": {"type": "string"}}, "required": ["reporte"]}}},
 ]
+
+
+def subir_archivo(descripcion, ruta):
+    """Adjunta un archivo del PC a un formulario web.
+
+    ⚠️ SIN PROBAR contra un sitio real: aquí no hay Playwright instalado.
+
+    Se usa set_input_files sobre el <input type=file>, que es la vía nativa de Playwright: NO abre
+    el diálogo de Windows, así que no hay que pelearse con una ventana del sistema operativo (que
+    es justo donde este tipo de automatización se suele romper). Si el sitio insiste en abrir el
+    selector nativo, se atiende el evento 'filechooser', que es la forma soportada de interceptarlo."""
+    from Funciones_Slide.Sistema.Gestor_Archivos import _resolver
+
+    completa = _resolver(ruta)
+    if completa is None:
+        return f"No encontré el archivo «{ruta}» en el PC, así que no puedo subirlo."
+    page = _asegurar_navegador()
+    try:
+        entrada = page.locator("input[type=file]").first
+        if entrada.count() > 0:
+            entrada.set_input_files(completa, timeout=TIMEOUT_ACCION)
+            return f"Adjunté {os.path.basename(completa)} al formulario."
+    except Exception:
+        pass
+    # Respaldo: el sitio abre el selector nativo al pulsar un botón.
+    try:
+        with page.expect_file_chooser(timeout=TIMEOUT_ACCION) as info:
+            clic_en(descripcion or "subir archivo")
+        info.value.set_files(completa)
+        return f"Adjunté {os.path.basename(completa)} al formulario."
+    except Exception as e:
+        return f"No pude adjuntar el archivo: {e}"
+
+
+def descargar_archivo(descripcion):
+    """Pulsa el enlace/botón de descarga y GUARDA lo que baje, devolviendo dónde quedó.
+
+    ⚠️ SIN PROBAR contra un sitio real.
+
+    Se usa expect_download, que entrega el archivo de forma determinista. La alternativa —vigilar
+    la carpeta de Descargas a ver qué aparece— es adivinar: no se sabe cuándo terminó ni cuál de
+    los archivos nuevos era el nuestro si hay varios bajando."""
+    page = _asegurar_navegador()
+    destino_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    os.makedirs(destino_dir, exist_ok=True)
+    try:
+        with page.expect_download(timeout=45000) as info:
+            clic_en(descripcion or "descargar")
+        bajada = info.value
+        destino = os.path.join(destino_dir, bajada.suggested_filename or "descarga")
+        bajada.save_as(destino)
+        return f"Descargado en {destino}"
+    except Exception as e:
+        return f"No pude descargar: {e}"
 
 
 def pedir_a_marco(pregunta):
@@ -585,12 +643,16 @@ _FUNCIONES_WEB = {
     "mantener_cursor_en": mantener_cursor_en, "arrastrar_de_a": arrastrar_de_a,
     "anotar_nota": anotar_nota, "estado_pagina": estado_pagina,
     "pedir_a_marco": pedir_a_marco,
+    "subir_archivo": subir_archivo, "descargar_archivo": descargar_archivo,
 }
 
 _SISTEMA_WEB = (
     "Eres AIDEN navegando la web por Marco. Cumple su objetivo paso a paso usando SOLO estas "
     "herramientas de navegador (ir_a, clic_en, escribir_en, cerrar_popups, explorar_y_resumir, "
-    "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina, pedir_a_marco). "
+    "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina, pedir_a_marco, "
+    "subir_archivo, descargar_archivo). "
+    "Si hay que ADJUNTAR un archivo del PC usa subir_archivo con su nombre; si hay que BAJAR algo "
+    "usa descargar_archivo y luego di dónde quedó. Ninguna de las dos salta el freno de pagos. "
     "Si la página pide un CÓDIGO DE VERIFICACIÓN (2FA) que le llegó al teléfono a Marco, o un dato "
     "personal que no tienes, usa pedir_a_marco: él te lo contesta al celular y sigues. Eso NO "
     "aplica a CAPTCHAs ni a pagos: esos se reportan y se termina. "

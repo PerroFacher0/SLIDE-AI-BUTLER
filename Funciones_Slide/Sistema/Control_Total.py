@@ -246,10 +246,12 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     b64 = base64.b64encode(comando.encode("utf-16-le")).decode("ascii")
     envoltorio = (
         "Remove-Variable * -Scope Global -Force -ErrorAction SilentlyContinue; "
-        f"Set-Location -LiteralPath '{_RAIZ}'; $Error.Clear(); "
+        f"Set-Location -LiteralPath '{_carpeta_actual()}'; $Error.Clear(); "
         f"Invoke-Expression ([Text.Encoding]::Unicode.GetString("
         f"[Convert]::FromBase64String('{b64}'))); "
-        f"Write-Output \"{_MARCA}$($Error.Count)\"\n"
+        # La marca se lleva de paso el nº de errores y la carpeta donde quedó el comando, así no
+        # hace falta un segundo delimitador ni ensuciar la salida que ve Marco.
+        f"Write-Output \"{_MARCA}$($Error.Count)|$((Get-Location).Path)\"\n"
     )
     try:
         proc.stdin.write(envoltorio)
@@ -333,10 +335,13 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
 
     antes, _, despues = bruto.partition(_MARCA)
     salida = antes.strip()
+    cabecera = despues.strip().split("\n")[0]
+    n_txt, _, carpeta = cabecera.partition("|")
     try:
-        n_errores = int((despues.strip().split() or ["0"])[0])
+        n_errores = int(n_txt.strip() or 0)
     except ValueError:
         n_errores = 0
+    _recordar_carpeta(carpeta.strip())
 
     _registrar(descripcion, comando)
     nota = _nota_preguntas(contestadas)
@@ -346,6 +351,101 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
         return f"Hecho, señor{nota}. (Sin salida que reportar.)"
     resultado = salida or error
     return resultado[:1500] + (" (...recortado)" if len(resultado) > 1500 else "") + nota
+
+
+# ── CARPETA DE TRABAJO QUE SE RECUERDA ───────────────────────────────────────
+# "Entra en la carpeta del proyecto" y luego "corre el script": la segunda orden tiene que saber
+# dónde dejó la primera. Se recuerda SOLO la carpeta, no el resto del estado — las variables se
+# siguen limpiando entre comandos. Es el punto medio deliberado: lo que Marco espera que se
+# recuerde (dónde está) se recuerda; lo que causaría efectos raros a distancia (variables sueltas
+# de un comando anterior) no.
+_carpeta = None
+
+
+def _carpeta_actual():
+    return _carpeta if (_carpeta and os.path.isdir(_carpeta)) else os.path.normpath(_RAIZ)
+
+
+def _misma_carpeta(a, b):
+    """En Windows las rutas NO distinguen mayúsculas, y PowerShell devuelve la unidad en mayúscula
+    mientras que Python la calcula en minúscula: 'C:\\...' y 'c:\\...' son el mismo sitio."""
+    try:
+        return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+    except Exception:
+        return False
+
+
+def _recordar_carpeta(ruta):
+    global _carpeta
+    if ruta and os.path.isdir(ruta):
+        _carpeta = os.path.normpath(ruta)
+
+
+def carpeta_de_trabajo():
+    """Dónde quedó AIDEN tras el último comando (para que lo pueda decir si se le pregunta)."""
+    return _carpeta_actual()
+
+
+# ── ¿SE ABRIÓ UNA VENTANA? ───────────────────────────────────────────────────
+# Un "start spotify" no devuelve nada por la salida estándar, así que AIDEN respondía "Hecho,
+# señor. (Sin salida que reportar.)" sin saber qué había abierto — y sin poder decirle luego a
+# controlar_pantalla sobre qué ventana actuar. Se comparan las ventanas de antes y las de después.
+# Solo se espera a que aparezca si el comando PARECE que lanza algo: para un 'ipconfig' no se
+# retrasa nada en absoluto.
+_LANZADORES = re.compile(
+    r"\b(start|start-process|invoke-item|explorer|notepad|code|spotify|chrome|msedge|firefox)\b"
+    r"|\.exe\b|\.lnk\b", re.I)
+
+
+def _titulos_visibles():
+    try:
+        import win32gui
+    except Exception:
+        return set()
+    titulos = set()
+
+    def _cb(hwnd, _):
+        try:
+            if win32gui.IsWindowVisible(hwnd):
+                t = (win32gui.GetWindowText(hwnd) or "").strip()
+                if t:
+                    titulos.add(t)
+        except Exception:
+            pass
+
+    try:
+        win32gui.EnumWindows(_cb, None)
+    except Exception:
+        return set()
+    return titulos
+
+
+def _ventana_nueva(antes, comando, espera_max=1.5):
+    if not antes:
+        return None
+    if not _LANZADORES.search(comando or ""):
+        nuevas = _titulos_visibles() - antes        # sin esperar nada
+        return next(iter(nuevas), None) if nuevas else None
+    import time as _t
+    limite = _t.monotonic() + espera_max
+    while _t.monotonic() < limite:
+        nuevas = _titulos_visibles() - antes
+        if nuevas:
+            return sorted(nuevas, key=len)[-1]      # el título más descriptivo
+        _t.sleep(0.15)
+    return None
+
+
+def _cola_ventana(antes, comando, resultado):
+    """Añade al final ' (Se abrió la ventana: «X»)' si el comando levantó algo. No se anuncia si
+    la cosa se cortó a medias: en ese caso el mensaje ya dice lo que hay que decir."""
+    if any(resultado.startswith(p) for p in ("Detenido", "El comando tardó", "Corté", "Me niego")):
+        return ""
+    try:
+        nueva = _ventana_nueva(antes, comando)
+    except Exception:
+        return ""
+    return f" (Se abrió la ventana: «{nueva[:60]}»)" if nueva else ""
 
 
 def _registrar(descripcion, comando):
@@ -383,11 +483,13 @@ def ejecutar_en_pc(comando, descripcion="", respuestas="", timeout=45):
     pendientes = [r.strip() for r in str(respuestas or "").split("|")] if respuestas else []
     por_defecto = pendientes[-1] if pendientes else "S"
 
+    ventanas_antes = _titulos_visibles()
+
     # Primero la sesión caliente (~130 ms). Si no está disponible o se cae, el camino de siempre.
     try:
         rapido = _en_sesion(comando, descripcion, list(pendientes), por_defecto, timeout)
         if rapido is not None:
-            return rapido
+            return rapido + _cola_ventana(ventanas_antes, comando, rapido)
     except Exception:
         _matar_sesion()
 
