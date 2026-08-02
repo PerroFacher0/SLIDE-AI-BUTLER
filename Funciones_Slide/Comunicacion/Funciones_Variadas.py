@@ -10,49 +10,147 @@ import queue
 
 from secretos import CONTACTOS as contactos   # los telefonos viven en secretos.py (fuera de git)
 
-def Enviar_mensaje_Whatsapp(nombre_contacto,mensaje):
-    nombre_limpio= nombre_contacto.strip().upper()
+# ── ENCONTRAR AL CONTACTO ────────────────────────────────────────────────────
+# Antes se exigía que el nombre coincidiera EXACTO con la clave de CONTACTOS. Marco habla, no
+# teclea: dice "Tito" y está guardado "TITO ANDRES", dice "Maria" y está guardado "MARÍA". Cada una
+# de esas fallaba en seco, y encima sin decir qué contactos sí existían.
+#
+# Se resuelve por niveles, del más seguro al más laxo, parando en el primero que dé algo. La regla
+# que NO se negocia: si hay más de un candidato, NO se manda nada — se pregunta. Mandarle un
+# mensaje a la persona equivocada no se puede deshacer.
 
-    if nombre_limpio in contactos:
-        numero = contactos[nombre_limpio]
-        mensaje= mensaje.replace(" ","%20")
-        App = f"whatsapp://send?phone={numero}&text={mensaje}"
+_CASI_IGUAL = 0.85   # parecido a partir del cual se da por buena una transcripción torcida
 
-        os.startfile(App)
 
+def _sin_tildes(texto):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(texto or ""))
+                   if unicodedata.category(c) != "Mn").strip().upper()
+
+
+def _buscar_contacto(nombre_buscado):
+    """Devuelve ('OK', {nombre_real, numero}) | ('AMBIGUO', [nombres]) | ('NO_ENCONTRADO', None)."""
+    buscado = _sin_tildes(nombre_buscado)
+    if not buscado:
+        return "NO_ENCONTRADO", None
+
+    # normalizado -> [claves reales]. Se guarda lista porque dos claves distintas pueden
+    # normalizar igual ("MARÍA" y "MARIA") y no se puede elegir por ellas a ciegas.
+    indice = {}
+    for clave in contactos:
+        indice.setdefault(_sin_tildes(clave), []).append(clave)
+
+    def _resolver(claves):
+        reales = [r for c in claves for r in indice[c]]
+        if len(reales) == 1:
+            return "OK", {"nombre_real": reales[0], "numero": contactos[reales[0]]}
+        return "AMBIGUO", sorted(reales)
+
+    # (b) exacto ya normalizado: el camino feliz, ahora tolerante a tildes y mayúsculas.
+    if buscado in indice:
+        return _resolver([buscado])
+
+    # (c) por PALABRA COMPLETA. Deliberadamente NO se usa subcadena: "ANA" está dentro de "ANABEL",
+    # y con subcadena AIDEN creería que acertó y le escribiría a Anabel sin preguntar. Por palabra
+    # completa, "Ana" no encuentra a "ANABEL" — y eso es lo correcto: mejor preguntar que acertarle
+    # a la persona equivocada.
+    tokens = [c for c in indice if buscado in c.split()]
+    if tokens:
+        return _resolver(tokens)
+
+    # (d) último recurso: parecido tipográfico, por si Whisper transcribió algo torcido.
+    # Un parecido NO es una coincidencia, es una SUPOSICIÓN, y aquí suponer manda un mensaje que no
+    # se puede recoger. Por eso se separa por confianza: "Josua" contra "JOSHUA" se parecen un 91%
+    # (es claramente la misma palabra mal oída) y se acepta; "Ana" contra "ANABEL" se parecen un 67%
+    # (comparten el principio y ya) y ahí se PREGUNTA, porque puede ser otra persona.
+    import difflib
+    parecidos = difflib.get_close_matches(buscado, list(indice), n=3, cutoff=0.6)
+    if not parecidos:
+        return "NO_ENCONTRADO", None
+    seguros = [c for c in parecidos
+               if difflib.SequenceMatcher(None, buscado, c).ratio() >= _CASI_IGUAL]
+    if len(seguros) == 1:
+        return _resolver(seguros)
+    return "AMBIGUO", sorted(r for c in parecidos for r in indice[c])
+
+
+def _fallo_contacto(estado, opciones, nombre, verbo):
+    """El mensaje para cuando NO se puede actuar. Devuelve None si sí se puede."""
+    if estado == "NO_ENCONTRADO":
+        conocidos = ", ".join(sorted(contactos)[:8])
+        cola = f" Tengo registrados a: {conocidos}." if conocidos else ""
+        return f"No tengo registrado a «{nombre}», señor.{cola}"
+    if estado == "AMBIGUO":
+        # Con UN solo candidato "varios contactos parecidos" suena a error; es una confirmación,
+        # no una lista. Marco esto lo OYE, así que tiene que sonar a persona.
+        if len(opciones) == 1:
+            return f"No tengo a «{nombre}» exacto, señor. ¿Quiere decir {opciones[0]}?"
+        return (f"Tengo varios contactos parecidos a «{nombre}», señor: "
+                f"{', '.join(opciones)}. ¿A cuál le {verbo}?")
+    return None
+
+
+def Enviar_mensaje_Whatsapp(nombre_contacto, mensaje):
+    try:
+        estado, res = _buscar_contacto(nombre_contacto)
+        problema = _fallo_contacto(estado, res, nombre_contacto, "escribo")
+        if problema:
+            return problema
+
+        # quote() y no replace(" ","%20"): antes solo se escapaban los ESPACIOS, así que un
+        # mensaje con "&" se cortaba ahí mismo (en una URL el & separa parámetros) y los acentos
+        # o los "?" llegaban rotos. Justo los mensajes en español que más manda AIDEN.
+        import urllib.parse
+        texto = urllib.parse.quote(str(mensaje or ""))
+        os.startfile(f"whatsapp://send?phone={res['numero']}&text={texto}")
         time.sleep(4)
+    except Exception as e:
+        return f"No pude abrir WhatsApp para escribirle a {nombre_contacto}, señor: {e}"
 
+    # El Enter se manda a lo que sea que tenga el foco. Si WhatsApp tardó más de la cuenta en
+    # abrir, ese Enter cae en otra ventana y el mensaje se queda escrito sin enviar. Se separa
+    # para poder decirlo con claridad en vez de dar por hecho que salió.
+    try:
         pyautogui.press("enter")
-        return "Mensaje enviado correctamente señor"
-    else:
-        return "Contacto no econtrado/registrado"
-    
+    except Exception:
+        return (f"Abrí WhatsApp con el mensaje para {res['nombre_real']}, señor, pero no pude "
+                "confirmar el envío. Reviselo, por favor.")
+    return f"Mensaje enviado a {res['nombre_real']}, señor"
+
+
 def colgar():
-    pyautogui.moveTo(1000,600)
-    pyautogui.click()
-    pyautogui.press("tab",presses=7,interval=0.1)
-    pyautogui.press("enter")
-    return "Llamada finalizada, señor"
+    try:
+        pyautogui.moveTo(1000, 600)
+        pyautogui.click()
+        pyautogui.press("tab", presses=7, interval=0.1)
+        pyautogui.press("enter")
+        return "Llamada finalizada, señor"
+    except Exception as e:
+        return f"No pude colgar la llamada, señor: {e}"
 
-    
+
 def llamada_whatsapp(nombre_contacto):
-    nombre_limpio = nombre_contacto.strip().upper()
+    try:
+        estado, res = _buscar_contacto(nombre_contacto)
+        problema = _fallo_contacto(estado, res, nombre_contacto, "llamo")
+        if problema:
+            return problema
 
-    if nombre_limpio in contactos:
-        numero = contactos[nombre_limpio]
-        App = f"whatsapp://send?phone={numero}"
-        os.startfile(App)
-
+        os.startfile(f"whatsapp://send?phone={res['numero']}")
         time.sleep(3)
+    except Exception as e:
+        return f"No pude abrir WhatsApp para llamar a {nombre_contacto}, señor: {e}"
 
-        pyautogui.press("tab",presses=10,interval=0.1)
+    try:
+        pyautogui.press("tab", presses=10, interval=0.1)
         pyautogui.press("enter")
         time.sleep(1)
-        pyautogui.moveTo(1550,160)
+        pyautogui.moveTo(1550, 160)
         pyautogui.click()
-        return f"Llamando a {nombre_contacto}, señor"
-    else:
-        return "Ese contacto no está registrado, señor"
+    except Exception:
+        return (f"Abrí el chat de {res['nombre_real']}, señor, pero no pude iniciar la llamada. "
+                "Pulse usted el botón de llamar.")
+    return f"Llamando a {res['nombre_real']}, señor"
 def Auto_Modificacion(nombre_habilidad, instruccion):
     # Hace que AIDEN APRENDA una habilidad nueva para SI MISMO usando Claude Code: le pide
     # escribir la funcion en Nucleo_Slide/Auto_Programacion.py y la recarga en vivo. Corre en
