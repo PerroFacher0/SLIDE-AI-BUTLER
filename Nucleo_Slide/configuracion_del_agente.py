@@ -1,13 +1,13 @@
 from Funciones_Slide.Comunicacion.Funciones_Variadas import Enviar_mensaje_Whatsapp, llamada_whatsapp, colgar, Auto_Modificacion
 from Funciones_Slide.Productividad.Gestion_datos import guardar_en_json
-from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Apps, Abrir_Videos_Youtube, Buscar_en_Google, Salir
-from Funciones_Slide.Sistema.Funciones_Sistema import cerrar_aplicacion, ver_apps_abiertas, clima, buscar_en_internet, leer_portapapeles, control_musica, control_volumen, estado_sistema
+from Funciones_Slide.Sistema.Comandos_Asistente import Abrir_Apps, Abrir_Videos_Youtube, Salir
+from Funciones_Slide.Sistema.Funciones_Sistema import cerrar_aplicacion, ver_apps_abiertas, clima, buscar, leer_portapapeles, control_musica, control_volumen, estado_sistema
 from Nucleo_Slide.Memoria import memoria
 from Funciones_Slide.Info.Vision import analizar
 from Funciones_Slide.Info.Finanzas import acciones
 from Funciones_Slide.Productividad.Notas import notas
 from Funciones_Slide.Comunicacion.Llamadas import contestar_llamada
-from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, ajustar_brillo, buscar_archivo
+from Funciones_Slide.Sistema.Control_PC import dictar, abrir_carpeta, control_ventana, controlar_energia, tomar_captura, buscar_archivo
 from Funciones_Slide.Sistema.Control_Pantalla import controlar_pantalla
 from Nucleo_Slide.Cancelacion import cancelar
 from Funciones_Slide.Sistema.Macros import macro
@@ -18,7 +18,7 @@ from Funciones_Slide.Sistema.Vigilante_Eventos import esperar_evento
 from Funciones_Slide.Sistema.Hardware_Externo import hardware
 from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Funciones_Slide.Sistema.Misiones import ejecutar_mision
-from Nucleo_Slide.Memoria_RAG import recordar_a_fondo
+from Nucleo_Slide.Memoria_RAG import recordar
 from Funciones_Slide.Info.Investigacion import investigar
 from Funciones_Slide.Info.Finanzas_Gastos import mis_gastos
 from Funciones_Slide.Productividad.Protocolos import activar_protocolo, crear_protocolo
@@ -32,7 +32,6 @@ from Funciones_Slide.Info.Web import abrir_web
 from Funciones_Slide.Sistema.Navegador_Web import navegar_web
 from Funciones_Slide.Sistema.Escucha_Sistema import que_esta_sonando
 from Funciones_Slide.Sistema.Gestor_Archivos import gestionar_archivos
-from Funciones_Slide.Sistema.Windows_Admin import matar_proceso, volumen_exacto, brillo_exacto
 from Funciones_Slide.Info.Redactor import redactar_documento
 from Funciones_Slide.Info.Estudio import resolver_visual
 from Funciones_Slide.Info.Bitacora import resumen_actividad
@@ -42,7 +41,6 @@ from Funciones_Slide.Info.Utilidades import calculadora, convertir_moneda
 from Funciones_Slide.Info.Noticias import noticias_del_dia
 from Funciones_Slide.Info.Experto import consultar_experto
 from Funciones_Slide.Info.Codigo import explicar_error
-from Nucleo_Slide.Memoria_Episodica import recordar_conversacion
 from Funciones_Slide.Sistema.Programador import proyecto
 
 
@@ -135,17 +133,21 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "Buscar_en_Google",
-            "description": "ABRE el navegador con los resultados de Google para que Marco los VEA en pantalla. Úsala SOLO cuando Marco pida 'abre/muéstrame/búscame X en Google' o ver una página. NO la uses para responderle tú con datos: para eso usa buscar_en_internet.",
+            "name": "buscar",
+            "description": "Busca en internet. Por defecto LEE los resultados y te los devuelve como texto para que TU le respondas a Marco con datos reales y actuales (informacion reciente, resultados deportivos, datos que cambian, algo que no sabes con certeza). Con abrir=true deja la busqueda EN PANTALLA en el navegador, para cuando Marco pida 'abreme/muestrame X en Google'. NO la uses para conversacion casual, ni para operar un sitio web paso a paso (eso es navegar_web), ni para abrir una pagina conocida por su nombre (eso es abrir_web).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "Pagina": {
+                    "consulta": {
                         "type": "string",
-                        "description": "El término o pregunta a buscar en internet."
+                        "description": "Lo que se va a buscar, redactado como una busqueda concisa (ej. 'resultado partido Real Madrid hoy')."
+                    },
+                    "abrir": {
+                        "type": "boolean",
+                        "description": "true = abrir los resultados en el navegador para que Marco los VEA. false (por defecto) = devolverte el texto para que le respondas tu."
                     }
                 },
-                "required": ["Pagina"]
+                "required": ["consulta"]
             }
         }
     },
@@ -209,13 +211,17 @@ tools = [
         "type": "function",
         "function": {
             "name": "cerrar_aplicacion",
-            "description": "Cierra una aplicación abierta en el sistema por su nombre de proceso (ej. chrome.exe, spotify.exe).",
+            "description": "Cierra una aplicacion abierta, por su nombre (ej. 'chrome', 'spotify'). Con forzar=true la MATA sin pedirle permiso: eso es lo que hay que hacer con una app COLGADA que no responde ('cierra Chrome a la fuerza', 'mata el proceso X'). Para cerrar solo una VENTANA o una PESTAÑA usa control_ventana o controlar_pantalla.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "nombre_app": {
                         "type": "string",
-                        "description": "Nombre del proceso a cerrar (ej. 'chrome.exe', 'spotify.exe', 'discord.exe')."
+                        "description": "Nombre del programa a cerrar (ej. 'chrome', 'spotify', 'discord'). El .exe es opcional."
+                    },
+                    "forzar": {
+                        "type": "boolean",
+                        "description": "true = matarlo a la fuerza (app colgada / no responde). false (por defecto) = cierre normal y ordenado."
                     }
                 },
                 "required": ["nombre_app"]
@@ -287,23 +293,6 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "buscar_en_internet",
-            "description": "Busca en la web y te DEVUELVE EL TEXTO de los resultados para que TÚ le respondas a Marco con datos reales (NO abre el navegador). Úsala cuando Marco quiera que le DIGAS/RESPONDAS algo actual: información reciente, resultados deportivos, datos que cambian, o algo que no sabes con certeza. Si lo que pide es ABRIR la búsqueda en pantalla, usa Buscar_en_Google. No la uses para conversación casual.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "consulta": {
-                        "type": "string",
-                        "description": "Lo que se va a buscar, redactado como una búsqueda concisa (ej. 'resultado partido Real Madrid hoy')."
-                    }
-                },
-                "required": ["consulta"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "buscar_archivo",
             "description": "Busca un archivo por su nombre en las carpetas de Marco (Descargas, Documentos, Escritorio, etc.) y abre el primero que encuentre. Úsala cuando pida buscar o encontrar un archivo, documento, foto, etc.",
             "parameters": {
@@ -350,20 +339,6 @@ tools = [
             "name": "tomar_captura",
             "description": "Toma una captura de pantalla y la guarda en la carpeta Capturas. Úsala cuando Marco pida un screenshot o captura de pantalla.",
             "parameters": {"type": "object", "properties": {}, "required": []}
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "ajustar_brillo",
-            "description": "Sube, baja o fija el brillo de la pantalla. Úsala cuando Marco pida más/menos brillo o un nivel específico.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "accion": {"type": "string", "description": "'subir', 'bajar', o un número 0-100."}
-                },
-                "required": ["accion"]
-            }
         }
     },
     {
@@ -627,13 +602,14 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "recordar_conversacion",
-            "description": "Busca en el HISTORIAL de conversaciones pasadas con Marco lo que ya hablaron. Úsala cuando Marco pregunte qué hablaron antes, qué te contó/le dijiste, '¿te acuerdas cuando...?', '¿de qué hablamos ayer?', o pida recordar una charla anterior. Devuelve los intercambios para que los relates con tu estilo.",
+            "name": "recordar",
+            "description": "Busca en el HISTORIAL de conversaciones pasadas con Marco. Usala cuando pregunte que hablaron antes, que te conto o le dijiste, '¿te acuerdas cuando...?', '¿de que hablamos ayer?', '¿que hemos hablado de mis estudios?'. Por defecto (modo 'auto') busca primero por SIGNIFICADO — encuentra 'la tesis' aunque Marco diga 'la universidad' — y si no saca nada reintenta por palabras exactas. Solo cambia 'modo' si necesitas forzar uno: 'palabras' para un termino literal o para traer lo mas reciente. NO la uses para datos permanentes que Marco te pidio guardar (eso es memoria) ni para lo que hubo en PANTALLA (eso es memoria_visual).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "tema": {"type": "string", "description": "Tema o palabra clave de lo que se habló (ej. 'fútbol', 'parcial', 'discord'). Opcional: si se omite, trae las conversaciones más recientes."},
-                    "dias": {"type": "number", "description": "Limita la búsqueda a los últimos N días (ej. 1 = ayer/hoy). Opcional."}
+                    "consulta": {"type": "string", "description": "Tema o pregunta a buscar. Opcional: si se omite, trae lo mas reciente."},
+                    "modo": {"type": "string", "description": "auto (por defecto) | significado | palabras"},
+                    "dias": {"type": "number", "description": "Limita a los ultimos N dias (ej. 1 = ayer/hoy). Solo aplica al modo por palabras. Opcional."}
                 },
                 "required": []
             }
@@ -705,22 +681,8 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "recordar_a_fondo",
-            "description": "Busca en TODO el historial de conversaciones por SIGNIFICADO (no por palabras exactas). Úsala cuando Marco pregunte qué hablaron sobre un tema y la coincidencia pueda no usar las mismas palabras ('¿qué hemos hablado de mis estudios?', 'busca a fondo lo de mi proyecto'). Más potente que recordar_conversacion (que es por palabra clave/fecha).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "consulta": {"type": "string", "description": "El tema o pregunta a buscar por significado."}
-                },
-                "required": ["consulta"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "investigar",
-            "description": "Investiga un tema A FONDO (multi-paso: descompone en sub-preguntas, busca cada una en internet y SINTETIZA un informe), te lo reporta por voz y lo guarda como nota. Úsala cuando Marco diga 'investiga/averigua/analiza a fondo X', 'hazme un informe sobre X'. Distinta de buscar_en_internet (una búsqueda) y consultar_experto (razona sin buscar). Tarda; corre en segundo plano.",
+            "description": "Investiga un tema A FONDO (multi-paso: descompone en sub-preguntas, busca cada una en internet y SINTETIZA un informe), te lo reporta por voz y lo guarda como nota. Úsala cuando Marco diga 'investiga/averigua/analiza a fondo X', 'hazme un informe sobre X'. Distinta de buscar (una sola búsqueda) y consultar_experto (razona sin buscar). Tarda; corre en segundo plano.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -861,13 +823,13 @@ tools = [
         "type": "function",
         "function": {
             "name": "perifericos",
-            "description": "Hardware CONECTADO al PC. accion='audio': cambia POR DONDE suena ('pasa el sonido a los audifonos', 'pon el audio en los parlantes'); sin objetivo, lista las salidas. accion='bateria': cuanta bateria les queda al mouse, teclado o audifonos inalambricos. accion='brillo': brillo de CADA monitor, incluidos los EXTERNOS por DDC/CI (ajustar_brillo y brillo_exacto solo sirven para la pantalla del portatil; para un monitor externo usa ESTA).",
+            "description": "Hardware CONECTADO al PC, y el BRILLO de las pantallas. accion='brillo': sube, baja o fija el brillo de CUALQUIER monitor, el del portatil y los EXTERNOS (habla DDC/CI por el cable de video). Es la UNICA forma de tocar el brillo: 'sube el brillo', 'pon el brillo en 70', 'baja el brillo del monitor grande'. accion='audio': cambia POR DONDE suena el PC ('pasa el sonido a los audifonos'); sin objetivo, lista las salidas. accion='bateria': cuanta bateria les queda al mouse, teclado o audifonos inalambricos.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "accion": {"type": "string", "description": "audio | bateria | brillo"},
+                    "accion": {"type": "string", "description": "brillo | audio | bateria"},
                     "objetivo": {"type": "string", "description": "Parte del nombre del dispositivo o monitor (ej. 'sony', 'audifonos'). Vacio = todos / listar."},
-                    "nivel": {"type": "integer", "description": "Solo para brillo: 0-100. Vacio para solo consultar."}
+                    "nivel": {"type": "string", "description": "Solo para brillo: un numero 0-100, o 'subir'/'bajar' si Marco no dio cifra. Vacio para solo consultar como esta."}
                 },
                 "required": ["accion"]
             }
@@ -972,7 +934,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "abrir_web",
-            "description": "Abre una página web en el navegador: un sitio conocido por nombre (youtube, gmail, github, netflix, drive, canvas...) o una URL cualquiera. Úsala para 'abre youtube', 'abre youtube y busca X' (buscar=X), 'abre mi correo', 'abre <página>'. Distinta de Buscar_en_Google (búsqueda) y de Abrir_Videos_Youtube (reproduce directo).",
+            "description": "Abre una página web en el navegador: un sitio conocido por nombre (youtube, gmail, github, netflix, drive, canvas...) o una URL cualquiera. Úsala para 'abre youtube', 'abre youtube y busca X' (buscar=X), 'abre mi correo', 'abre <página>'. Distinta de buscar (búsqueda en internet) y de Abrir_Videos_Youtube (reproduce directo).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1048,42 +1010,6 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "matar_proceso",
-            "description": "Cierra a la fuerza un programa/proceso por nombre. Úsala cuando Marco diga 'cierra Chrome a la fuerza', 'mata el proceso X', 'fuerza el cierre de Y' (p.ej. una app colgada).",
-            "parameters": {
-                "type": "object",
-                "properties": {"nombre": {"type": "string", "description": "Nombre del programa/proceso (ej. 'chrome', 'spotify')."}},
-                "required": ["nombre"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "volumen_exacto",
-            "description": "Pone el volumen del sistema en un porcentaje exacto (0-100). Úsala para 'pon el volumen en 30', 'volumen al 50'.",
-            "parameters": {
-                "type": "object",
-                "properties": {"nivel": {"type": "integer", "description": "Porcentaje de volumen (0-100)."}},
-                "required": ["nivel"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "brillo_exacto",
-            "description": "Pone el brillo de la pantalla en un porcentaje exacto (0-100). Úsala para 'pon el brillo en 70', 'brillo al 40'.",
-            "parameters": {
-                "type": "object",
-                "properties": {"nivel": {"type": "integer", "description": "Porcentaje de brillo (0-100)."}},
-                "required": ["nivel"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "redactar_documento",
             "description": "Escribe un DOCUMENTO completo y lo guarda en Word (y lo abre): ensayo, informe, carta, correo, resumen, discurso, reseña, artículo. Úsala cuando Marco diga 'escríbeme un ensayo sobre X', 'hazme un informe de Y', 'redacta una carta para Z', 'escríbeme un correo diciendo...'. TÚ defines el tipo y el tema a partir de lo que pide.",
             "parameters": {
@@ -1119,7 +1045,6 @@ tools_map = {
     "colgar": colgar,
     "Abrir_Apps": Abrir_Apps,
     "Abrir_Videos_Youtube": Abrir_Videos_Youtube,
-    "Buscar_en_Google": Buscar_en_Google,
     "guardar_en_json": guardar_en_json,
     "Salir": Salir,
     "Auto_Modificacion": Auto_Modificacion,
@@ -1127,7 +1052,7 @@ tools_map = {
     "cerrar_aplicacion": cerrar_aplicacion,
     "ver_apps_abiertas": ver_apps_abiertas,
     "clima": clima,
-    "buscar_en_internet": buscar_en_internet,
+    "buscar": buscar,
     "analizar": analizar,
     "leer_portapapeles": leer_portapapeles,
     "control_musica": control_musica,
@@ -1140,7 +1065,6 @@ tools_map = {
     "buscar_archivo": buscar_archivo,
     "controlar_energia": controlar_energia,
     "tomar_captura": tomar_captura,
-    "ajustar_brillo": ajustar_brillo,
     "activar_protocolo": activar_protocolo,
     "modo_gaming": modo_gaming,
     "resumir": resumir,
@@ -1152,7 +1076,6 @@ tools_map = {
     "estado_sistema": estado_sistema,
     "consultar_experto": consultar_experto,
     "explicar_error": explicar_error,
-    "recordar_conversacion": recordar_conversacion,
     "proyecto": proyecto,
     "controlar_pantalla": controlar_pantalla,
     "cancelar": cancelar,
@@ -1164,7 +1087,7 @@ tools_map = {
     "hardware": hardware,
     "gestionar_metas": gestionar_metas,
     "ejecutar_mision": ejecutar_mision,
-    "recordar_a_fondo": recordar_a_fondo,
+    "recordar": recordar,
     "investigar": investigar,
     "mis_gastos": mis_gastos,
     "crear_protocolo": crear_protocolo,
@@ -1180,9 +1103,6 @@ tools_map = {
     "restaurar_sesion": restaurar_sesion,
     "Enviar_mensaje_Discord": Enviar_mensaje_Discord,
     "abrir_web": abrir_web,
-    "matar_proceso": matar_proceso,
-    "volumen_exacto": volumen_exacto,
-    "brillo_exacto": brillo_exacto,
     "redactar_documento": redactar_documento,
     "resolver_visual": resolver_visual,
 }

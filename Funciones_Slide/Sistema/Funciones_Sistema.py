@@ -82,20 +82,32 @@ def control_volumen(accion, nivel=None):
 
 
 # ── PROCESOS ─────────────────────────────────────────────────────────────────
-def cerrar_aplicacion(nombre_app):
+def cerrar_aplicacion(nombre_app, forzar=False):
+   """Cierra un programa por nombre. Con forzar=True no le pide permiso: lo mata (para lo que ya
+   está colgado y no responde).
+
+   Antes esto vivía partido en dos herramientas — 'cerrar_aplicacion' y 'matar_proceso' — que decían
+   casi lo mismo y competían por la misma petición. Es la MISMA intención con distinta contundencia,
+   así que ahora es un parámetro, no otra herramienta."""
+   nombre = str(nombre_app or "").strip()
+   if not nombre:
+       return "¿Qué aplicación cierro, señor?"
+   # Tolerante con el .exe: Marco dice "chrome", el proceso se llama "chrome.exe".
+   buscado = nombre.lower().removesuffix(".exe")
    encontrado = False
 
    for proceso in psutil.process_iter(['name']):
        try:
-           if proceso.info['name'].lower() == nombre_app.lower():
-               proceso.terminate()
+           actual = (proceso.info['name'] or "").lower().removesuffix(".exe")
+           if actual == buscado:
+               proceso.kill() if forzar else proceso.terminate()
                encontrado = True
        except (psutil.NoSuchProcess, psutil.AccessDenied):
            continue   # ese proceso no se dejo, seguimos buscando el nuestro
 
    if encontrado:
-       return f"Cerré {nombre_app}, señor"
-   return f"No encontré {nombre_app} abierto, señor"
+       return f"Cerré {nombre}{' a la fuerza' if forzar else ''}, señor"
+   return f"No encontré {nombre} abierto, señor"
 
 
 def ver_apps_abiertas():
@@ -152,6 +164,24 @@ def buscar_en_internet(consulta):
         return "Esto encontré en internet:\n" + "\n".join(partes)
     except Exception as e:
         return f"No pude buscar en internet, señor: {e}"
+
+
+def buscar(consulta, abrir=False):
+    """Busca en internet. Por defecto LEE los resultados y los devuelve como texto para responder
+    con datos reales; con abrir=True los deja EN PANTALLA, en el navegador, para que Marco mire.
+
+    Antes eran dos herramientas ('buscar_en_internet' y 'Buscar_en_Google') que se disputaban cada
+    "busca X": comparten el 23% del vocabulario de sus descripciones. Lo que de verdad cambia entre
+    ellas no es qué buscan, sino DÓNDE acaba el resultado — así que eso es lo que ahora se pide."""
+    consulta = str(consulta or "").strip()
+    if not consulta:
+        return "¿Qué quiere que busque, señor?"
+    if abrir:
+        import urllib.parse
+        import webbrowser
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote_plus(consulta))
+        return f"Le abrí la búsqueda de «{consulta}» en el navegador, señor."
+    return buscar_en_internet(consulta)
 
 
 # ── PORTAPAPELES ──────────────────────────────────────────────────────────────

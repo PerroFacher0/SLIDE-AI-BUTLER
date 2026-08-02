@@ -115,3 +115,36 @@ def iniciar_rag():
                 pass
 
     threading.Thread(target=_bucle, daemon=True).start()
+
+
+def recordar(consulta="", modo="auto", dias=None):
+    """HERRAMIENTA: busca en las conversaciones pasadas con Marco.
+      modo='auto'      -> intenta por SIGNIFICADO y, si no saca nada, reintenta por palabras.
+      modo='significado' -> solo semántica (encuentra "la tesis" al preguntar por "la universidad").
+      modo='palabras'  -> solo literal (útil con un término exacto, o para traer lo más reciente).
+      dias -> limita a los últimos N días (solo aplica al modo por palabras).
+
+    Antes esto eran dos herramientas, 'recordar_conversacion' y 'recordar_a_fondo', con un 19% de
+    vocabulario común en sus descripciones: ambas decían "busca en el historial de conversaciones".
+    Marco nunca va a pedir "búscalo por embeddings" — pide que te acuerdes de algo. CÓMO se busca es
+    decisión de AIDEN, no una herramienta aparte que el modelo tenga que adivinar."""
+    from Nucleo_Slide.Memoria_Episodica import recordar_conversacion
+
+    m = str(modo or "auto").strip().lower()
+    consulta = str(consulta or "").strip()
+
+    # Sin texto no hay nada semántico que hacer: se pide "lo último", que es literal.
+    if not consulta or m.startswith("palabra") or m.startswith("literal"):
+        return recordar_conversacion(consulta, dias)
+
+    if m.startswith("signific") or m.startswith("fondo") or m.startswith("semant"):
+        return recordar_a_fondo(consulta)
+
+    # auto: primero por significado (más potente); si no encuentra, por palabras.
+    profunda = recordar_a_fondo(consulta)
+    if not profunda.startswith("No encuentro") and not profunda.startswith("Aún estoy"):
+        return profunda
+    literal = recordar_conversacion(consulta, dias)
+    if literal.startswith("No encontré") or literal.startswith("Todavía no"):
+        return profunda        # ninguna encontró: se devuelve el mensaje más informativo
+    return literal

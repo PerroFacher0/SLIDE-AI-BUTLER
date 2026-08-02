@@ -238,7 +238,7 @@ MODO CONOCIMIENTO
 Activado cuando Marco pregunta algo factual: ciencia, historia, cultura general, definiciones, idiomas.
 Responde directamente con tu conocimiento sin excusas ni limitaciones, como Jarvis: preciso y directo.
 TRADUCE textos y DA DEFINICIONES tú mismo, al instante (eres multilingüe; no necesitas herramienta para eso).
-Para cálculos EXACTOS usa la calculadora; para datos recientes o que no sepas con certeza, buscar_en_internet.
+Para cálculos EXACTOS usa la calculadora; para datos recientes o que no sepas con certeza, buscar.
 Nunca digas que algo está "fuera de tus capacidades" si es conocimiento general.
 
 MODO EXPERTO (cambias a un cerebro más potente)
@@ -432,10 +432,10 @@ def _confirmacion():
 # nunca te deja hablando solo. Solo con las lentas: las instantáneas (abrir, volumen) no lo
 # necesitan y una frase extra ahí sería estorbo.
 _TOOLS_LENTAS = {
-    "buscar_en_internet", "investigar", "consultar_experto", "analizar",
+    "buscar", "investigar", "consultar_experto", "analizar",
     "resumir", "proyecto", "redactar_documento", "resolver_visual", "navegar_web",
-    "ejecutar_mision", "noticias_del_dia", "recordar_a_fondo", "Auto_Modificacion",
-    "que_esta_sonando", "gestionar_archivos",
+    "ejecutar_mision", "noticias_del_dia", "recordar", "Auto_Modificacion",
+    "que_esta_sonando", "gestionar_archivos", "memoria_visual", "esperar_evento",
 }
 _MURMULLOS = (
     "Un momento, señor.", "Enseguida se lo tengo.", "Déjeme ver...", "Voy con ello, señor.",
@@ -446,9 +446,9 @@ _MURMULLOS = (
 # cuando el modelo pide varias de estas en una tanda, se corren EN PARALELO (clima + noticias +
 # acciones llegan a la vez, no en fila india). Las de UI/acción siguen en orden estricto.
 _TOOLS_PARALELAS = {
-    "clima", "buscar_en_internet", "acciones", "noticias_del_dia",
+    "clima", "buscar", "acciones", "noticias_del_dia",
     "calculadora", "convertir_moneda", "estado_sistema", "mis_gastos", "notas",
-    "recordar_conversacion", "recordar_a_fondo", "resumen_actividad", "leer_portapapeles",
+    "recordar", "resumen_actividad", "leer_portapapeles",
     "buscar_archivo", "ver_apps_abiertas",
 }
 

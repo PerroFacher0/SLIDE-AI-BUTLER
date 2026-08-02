@@ -29,7 +29,10 @@ def _ps(comando, timeout=20):
 
 
 def _norm(t):
-    return (t or "").strip().lower().translate(str.maketrans("áéíóúü", "aeiouu"))
+    # str(): 'nivel' puede llegar como número (75) o como texto ('subir'); el modelo manda
+    # cualquiera de los dos y un int no tiene .strip().
+    return str(t if t is not None else "").strip().lower().translate(
+        str.maketrans("áéíóúü", "aeiouu"))
 
 
 # ── Salidas de audio ──────────────────────────────────────────────────────────
@@ -167,14 +170,20 @@ def bateria_perifericos():
 
 # ── Brillo REAL, también en monitores externos (DDC/CI) ──────────────────────
 def perifericos(accion="bateria", objetivo="", nivel=None):
-    """HERRAMIENTA ÚNICA del hardware conectado (regla anti-bloat: una sola tool, no tres).
+    """HERRAMIENTA ÚNICA del hardware conectado.
+      accion='brillo'  -> brillo de CUALQUIER monitor (nivel: 0-100, 'subir' o 'bajar')
       accion='audio'   -> por dónde suena el PC (objetivo vacío = listar salidas)
       accion='bateria' -> batería de mouse/teclado/audífonos inalámbricos
-      accion='brillo'  -> brillo de cada monitor, externos incluidos (nivel 0-100 para fijarlo)"""
+
+    El brillo llegó a tener TRES caminos: 'ajustar_brillo' (relativo, monitor principal),
+    'brillo_exacto' (WMI, que solo mueve el panel del portátil y ni se entera de un monitor
+    externo) y esta. Tres formas de hacer lo mismo obligan al modelo a adivinar cuál, y una de
+    ellas simplemente no funcionaba en la pantalla grande. Ahora es este único camino, que habla
+    DDC/CI y por tanto sirve igual para el portátil y para los externos."""
     a = _norm(accion)
     if a.startswith("audio") or "sonid" in a or "altavo" in a or "audifon" in a:
         return audio("cambiar" if objetivo else "listar", objetivo)
-    if a.startswith("bril") or "monitor" in a or "pantalla" in a:
+    if a.startswith("bril") or "monitor" in a or "pantalla" in a or "luz" in a:
         return monitores(nivel, objetivo)
     return bateria_perifericos()
 
@@ -201,20 +210,36 @@ def monitores(nivel=None, cual=""):
     if not elegidas:
         return (f"No encontré un monitor «{cual}», señor. Tengo: " + ", ".join(pantallas))
 
-    if nivel is None:
-        lecturas = []
-        for p in elegidas:
-            try:
-                v = sbc.get_brightness(display=p)
-                lecturas.append(f"{p}: {(v[0] if isinstance(v, list) else v)}%")
-            except Exception:
-                lecturas.append(f"{p}: no reporta")
+    def _leer(p):
+        try:
+            v = sbc.get_brightness(display=p)
+            return int(v[0] if isinstance(v, list) else v)
+        except Exception:
+            return None
+
+    if nivel is None or str(nivel).strip() == "":
+        lecturas = [f"{p}: {v}%" if (v := _leer(p)) is not None else f"{p}: no reporta"
+                    for p in elegidas]
         return "Brillo de sus monitores, señor: " + "; ".join(lecturas)
 
-    try:
-        n = max(0, min(100, int(float(nivel))))
-    except (TypeError, ValueError):
-        return "Dígame un número de 0 a 100 para el brillo, señor."
+    # 'nivel' acepta un número o un empujón relativo ("sube el brillo" no trae número).
+    texto = _norm(nivel)
+    relativo = 0
+    if texto in ("subir", "sube", "mas", "arriba", "aumenta"):
+        relativo = +20
+    elif texto in ("bajar", "baja", "menos", "abajo", "reduce"):
+        relativo = -20
+
+    if relativo:
+        actual = next((v for p in elegidas if (v := _leer(p)) is not None), None)
+        if actual is None:
+            return "Sus monitores no me dicen en cuánto está el brillo, señor; dígame un número."
+        n = max(0, min(100, actual + relativo))
+    else:
+        try:
+            n = max(0, min(100, int(float(nivel))))
+        except (TypeError, ValueError):
+            return "Dígame un número de 0 a 100 (o 'subir'/'bajar') para el brillo, señor."
 
     hechos, fallidos = [], []
     for p in elegidas:
