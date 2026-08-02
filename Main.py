@@ -28,6 +28,7 @@ from Funciones_Slide.Sistema.Vigilante_Pantalla import iniciar_vigilante_pantall
 from Funciones_Slide.Sistema.Vigilante_Portapapeles import iniciar_vigilante_portapapeles
 from Funciones_Slide.Sistema.Vigilante_Eventos import iniciar_vigilante_eventos
 from Nucleo_Slide.Memoria_Visual import iniciar_memoria_visual
+from Funciones_Slide.Sistema.Control_Total import precalentar as precalentar_ps
 from Funciones_Slide.Sistema.Vigilante_Reunion import iniciar_vigilante_reunion
 from Nucleo_Slide.Conciencia_Ambiental import iniciar_conciencia_ambiental
 from Nucleo_Slide.Perfil_Marco import iniciar_perfil
@@ -82,6 +83,9 @@ if verificacion == "Bienvenido Marco":
     iniciar_vigilante_portapapeles(hablado_del_asistente)  # reacciona a lo que copias (error/YouTube)
     iniciar_vigilante_eventos(hablado_del_asistente)   # USB conectado / descarga terminada
     iniciar_memoria_visual()                           # pasado visual de la pantalla (APAGADA por defecto)
+    # Deja una sesión de PowerShell ya arrancada: el primer comando del día no paga los ~2s de
+    # arranque. Si falla, ejecutar_en_pc sigue funcionando por el camino de siempre.
+    precalentar_ps()
     iniciar_vigilante_reunion(hablado_del_asistente)   # modo reunión: silencia distracciones en llamadas
     iniciar_conciencia_ambiental()                     # mira el estado del PC y decide solo qué hacer
     iniciar_perfil()                                   # aprende quién es Marco con el tiempo

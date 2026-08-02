@@ -154,15 +154,28 @@ def _capturar_pantalla():
         return None, None, (0, 0)
 
 
+# Lado máximo de la imagen que se le manda al modelo. Con dos monitores la captura son 3840 px
+# de ancho y ~1.7 MB en base64; a 1280 baja a ~66 KB (96% menos) y el viaje por red deja de ser
+# el cuello de botella. NO se pierde precisión: las coordenadas que devuelve el modelo vienen
+# normalizadas 0-1000, así que se reescalan solas contra el tamaño REAL — que es justo por lo que
+# aquí se sigue devolviendo `size` original y no el de la imagen reducida. Además el propio Germini
+# submuestrea la imagen por dentro, así que mandarle 3840 px era tirar ancho de banda para nada.
+_LADO_MAX = 1280
+
+
 def _consultar_vista(prompt, max_tokens=150):
     """Captura TODOS los monitores y le hace UNA pregunta al modelo sobre lo que se ve.
-    Devuelve (texto, (ancho, alto), (origen_x, origen_y)) o (None, None, None)."""
+    Devuelve (texto, (ancho, alto), (origen_x, origen_y)) o (None, None, None).
+    OJO: `size` es el tamaño REAL de la pantalla, no el de la imagen enviada."""
     img, size, origen = _capturar_pantalla()
     if img is None:
         return None, None, None
     try:
         import io
         import base64
+        if max(img.size) > _LADO_MAX:
+            img = img.copy()
+            img.thumbnail((_LADO_MAX, _LADO_MAX))   # conserva la proporción
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")

@@ -399,6 +399,64 @@ def _instrucciones_completas(consulta=""):
     return base
 
 
+# TOPE CENTRAL DE SALIDA. Una herramienta que devuelve un chorro enorme (un listado de miles de
+# archivos, un portapapeles gigante, la salida de un comando verboso) se mete ENTERA en el contexto
+# del modelo: encarece el turno, empuja fuera lo que sí importaba y puede reventar la ventana.
+# Varias herramientas ya se recortaban a mano, cada una con su límite y su criterio — 31 archivos
+# distintos. Esto es la red de seguridad: pase lo que pase, nada entra al contexto por encima de
+# este tope. Las que recortan mejor (porque saben qué parte conservar) siguen haciéndolo antes; esto
+# solo actúa cuando nadie lo hizo.
+_MAX_SALIDA_TOOL = 4000
+
+
+def _recortar_salida(texto, nombre=""):
+    if len(texto) <= _MAX_SALIDA_TOOL:
+        return texto
+    # Se conserva el PRINCIPIO (donde suele estar lo importante) y el FINAL (donde suele estar el
+    # error o el total), que es lo que se pierde con un corte a secas.
+    cabeza = texto[:_MAX_SALIDA_TOOL - 600].rstrip()
+    cola = texto[-500:].lstrip()
+    print(f"[tool] recorte de seguridad en {nombre}: {len(texto)} -> ~{_MAX_SALIDA_TOOL} caracteres")
+    return (f"{cabeza}\n\n[...recortado: la salida completa eran {len(texto)} caracteres. "
+            f"Si necesitas una parte concreta, vuelve a pedirla acotada...]\n\n{cola}")
+
+
+def _ejecutar_tanda(tool_calls_list):
+    """Ejecuta las herramientas que el modelo pidió en una misma ronda, y devuelve sus resultados
+    EN EL MISMO ORDEN en que las pidió.
+
+    Las de SOLO LECTURA van a la vez; las que TOCAN algo, en fila y en su orden.
+    Antes era todo-o-nada: bastaba UNA que actuara para que TODAS fueran en fila, así que
+    "¿qué tiempo hace y súbeme el volumen?" pagaba el clima ENTERO antes de tocar el volumen.
+    Adelantar las lecturas es seguro justamente porque no cambian nada: den el resultado que den,
+    lo dan igual antes que después. Los resultados se recolocan en su hueco original para que cada
+    uno vuelva emparejado con SU llamada — si se devolvieran en el orden de ejecución, el modelo
+    leería la respuesta del clima como si fuera la del volumen."""
+    total = len(tool_calls_list)
+    resultados = [None] * total
+    lecturas, acciones = [], []
+    for i, tc in enumerate(tool_calls_list):
+        destino = lecturas if tc['function']['name'] in _TOOLS_PARALELAS else acciones
+        destino.append((i, tc))
+
+    def _correr(par):
+        _i, tc = par
+        return _ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
+
+    if len(lecturas) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(4, len(lecturas))) as _ex:
+            for (i, _tc), r in zip(lecturas, _ex.map(_correr, lecturas)):
+                resultados[i] = r
+    else:
+        # Una sola lectura no compensa levantar un hilo: va con las demás, en su sitio.
+        acciones = sorted(lecturas + acciones)
+
+    for par in acciones:
+        resultados[par[0]] = _correr(par)
+    return resultados
+
+
 def _ejecutar_tool_call(nombre_funcion, argumentos):
     # Ejecuta una herramienta de forma segura y devuelve el resultado como texto.
     datos = argumentos
@@ -412,7 +470,7 @@ def _ejecutar_tool_call(nombre_funcion, argumentos):
     if nombre_funcion not in tools_map:
         return f"La herramienta {nombre_funcion} no existe."
     try:
-        return str(tools_map[nombre_funcion](**datos))
+        return _recortar_salida(str(tools_map[nombre_funcion](**datos)), nombre_funcion)
     except Exception as e:
         return f"Error ejecutando {nombre_funcion}: {e}"
 
@@ -680,17 +738,7 @@ def proceso_de_ia(texto_de_whisper):
             from Nucleo_Slide.Latido_Trabajo import latido
             _lat = latido(decir).iniciar() if any(n in _TOOLS_LENTAS for n in nombres) else None
             try:
-                if len(tool_calls_list) > 1 and all(n in _TOOLS_PARALELAS for n in nombres):
-                    # Varias consultas de SOLO LECTURA -> en PARALELO (mucho más rápido).
-                    from concurrent.futures import ThreadPoolExecutor
-                    with ThreadPoolExecutor(max_workers=min(4, len(tool_calls_list))) as _ex:
-                        resultados = list(_ex.map(
-                            lambda tc: _ejecutar_tool_call(tc['function']['name'],
-                                                           tc['function']['arguments']),
-                            tool_calls_list))
-                else:
-                    resultados = [_ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
-                                  for tc in tool_calls_list]
+                resultados = _ejecutar_tanda(tool_calls_list)
             finally:
                 if _lat:
                     _lat.detener()

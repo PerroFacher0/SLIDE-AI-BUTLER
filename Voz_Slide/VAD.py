@@ -67,9 +67,13 @@ def Reconocimiento_de_habla():
       chunk_numpy = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
       if Canales > 1:
           chunk_numpy = chunk_numpy.reshape(-1, Canales).mean(axis=1)
-      torch_datos = torch.from_numpy(chunk_numpy)# aqui a torch, q es un lenguaje que las IAS entienden 
- 
-      probabilidad = modelo(torch_datos,16000).item()
+      torch_datos = torch.from_numpy(chunk_numpy)# aqui a torch, q es un lenguaje que las IAS entienden
+
+      # inference_mode: este forward corre ~31 veces por SEGUNDO, siempre, mientras AIDEN espera la
+      # palabra clave. Sin esto torch va montando el andamiaje de autograd (grafo y contadores de
+      # versión) en cada pasada para un gradiente que nadie va a calcular jamás. Es gratis quitarlo.
+      with torch.inference_mode():
+          probabilidad = modelo(torch_datos,16000).item()
       Tiempo_total = tiempo_inicial - tiempo_despierto
 
       if probabilidad > 0.6:
