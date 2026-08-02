@@ -45,14 +45,45 @@ def marcar_caja(x1, y1, x2, y2, etiqueta="", segundos=4.0):
     return True
 
 
-def mensaje(texto, segundos=5.0):
+def mensaje(texto, segundos=5.0, titulo=""):
     """Cartel flotante en pantalla. Para lo que conviene VER y no solo oír: un recordatorio, un
-    dato que hay que copiar a mano, el resultado de algo que corrió en segundo plano."""
+    dato que hay que copiar a mano, el resultado de algo que corrió en segundo plano.
+    Admite varias líneas (separadas por saltos) y un título opcional."""
     if not _activa:
         return False
     with _lock:
-        _mensajes.append({"texto": str(texto or "")[:220], "hasta": time.time() + segundos})
+        _mensajes.append({"texto": str(texto or "")[:900],
+                          "titulo": str(titulo or "")[:60],
+                          "hasta": time.time() + segundos})
     return True
+
+
+_MAX_FILAS_TARJETA = 8
+
+
+def presentar_tarjeta(titulo, lineas, segundos=8.0):
+    """Muestra datos ESTRUCTURADOS como un cartel legible.
+
+    Existe para que ninguna herramienta tenga que decidir cómo se ve un cartel. Quien llama trae el
+    dato ya formateado —él sabe si son pesos, si lleva signo, cuántos decimales—; la Mira decide
+    solo la presentación: el fondo, la tipografía, el espaciado y dónde cae en pantalla. Si cada
+    tool armara su propio cartel, en tres semanas habría cinco estilos distintos.
+
+      titulo   -> encabezado corto ('Tu portafolio')
+      lineas   -> lista de textos YA formateados (['NVDA  $128.50  +3.2%', ...])
+      segundos -> cuánto dura. Lo decide QUIEN LLAMA, que es el único que sabe si son dos datos de
+                  un vistazo o una lista que hay que leer con calma.
+
+    Se degrada igual que mensaje(): sin Qt no hace nada, ni bloquea ni lanza."""
+    filas = [str(l).strip() for l in (lineas or []) if str(l).strip()]
+    if not filas:
+        return mensaje(str(titulo or ""), segundos) if titulo else False
+    # Una tarjeta con veinte filas tapa la pantalla y no se lee: se corta y se dice cuántas faltan,
+    # que es más honesto que recortar en silencio.
+    sobran = len(filas) - _MAX_FILAS_TARJETA
+    if sobran > 0:
+        filas = filas[:_MAX_FILAS_TARJETA] + [f"(+{sobran} más)"]
+    return mensaje("\n".join(filas), segundos, titulo=str(titulo or ""))
 
 
 def limpiar():
@@ -155,16 +186,49 @@ def _construir():
                     p.drawText(x + radio + 8, y + 4, m["etiqueta"])
 
             # Carteles flotantes: apilados arriba al centro, donde no estorban al trabajo.
+            # MULTILÍNEA: drawText sobre un punto no interpreta los saltos de línea — dibuja todo
+            # seguido. Se parte el texto y se pinta línea a línea, midiendo la más ancha para que
+            # la caja quede a medida. Así el mismo cartel de siempre sirve para una frase suelta o
+            # para una tarjeta con título y varias filas, sin un segundo overlay.
             arriba = 34
             for c in carteles:
-                f = QFont(); f.setPointSize(11); p.setFont(f)
-                ancho = min(self.width() - 80, p.fontMetrics().horizontalAdvance(c["texto"]) + 34)
+                lineas = str(c["texto"]).split("\n") or [""]
+                titulo = c.get("titulo") or ""
+                f_tit = QFont(); f_tit.setPointSize(11); f_tit.setBold(True)
+                f_txt = QFont(); f_txt.setPointSize(11)
+
+                p.setFont(f_tit)
+                ancho = p.fontMetrics().horizontalAdvance(titulo) if titulo else 0
+                p.setFont(f_txt)
+                fm = p.fontMetrics()
+                for l in lineas:
+                    ancho = max(ancho, fm.horizontalAdvance(l))
+                ancho = min(self.width() - 80, ancho + 34)
+                alto_linea = fm.height() + 3
+                alto = 16 + (26 if titulo else 0) + len(lineas) * alto_linea
                 cx = (self.width() - ancho) // 2
+
                 p.setPen(Qt.NoPen)
                 p.setBrush(QColor(14, 14, 16, 226))
-                p.drawRoundedRect(cx, arriba, ancho, 40, 9, 9)
+                p.drawRoundedRect(cx, arriba, ancho, alto, 9, 9)
+
+                y = arriba + 10
+                if titulo:
+                    p.setFont(f_tit)
+                    p.setPen(QColor(255, 255, 255, 250))
+                    y += fm.ascent()
+                    p.drawText(cx + 17, y, titulo)
+                    # Filete tenue para separar el título de los datos, sin dibujar una caja más.
+                    p.setPen(QPen(QColor(255, 255, 255, 60), 1))
+                    p.drawLine(cx + 17, y + 7, cx + ancho - 17, y + 7)
+                    y += 16
+                p.setFont(f_txt)
                 p.setPen(QColor(238, 238, 238, 245))
-                p.drawText(cx + 17, arriba + 26, c["texto"])
+                for l in lineas:
+                    y += fm.ascent()
+                    p.drawText(cx + 17, y, l)
+                    y += alto_linea - fm.ascent()
+                arriba += alto + 8
                 arriba += 48
 
             if _estado_txt:
