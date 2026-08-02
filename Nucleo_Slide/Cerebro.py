@@ -601,10 +601,63 @@ def _crear_chat(messages):
             model=MODELO, messages=messages, tools=tools,
             tool_choice="auto", temperature=temp,
         )
+        _registrar_uso(resp)
         ultimo = resp
         if resp.choices[0].finish_reason != "error":
             return resp
     return ultimo
+
+
+# ── ¿ESTÁ ACERTANDO EL CACHÉ? ────────────────────────────────────────────────
+# El prompt se ordena a propósito para que Gemini cachee la parte estable (instrucciones, memoria,
+# perfil... y sobre todo el esquema de las 57 herramientas, que son ~11.800 tokens: la mayor parte
+# de lo que viaja en cada petición). Pero eso era una SUPOSICIÓN: nadie leía nunca lo que la API
+# responde sobre el uso, así que no había forma de saber si el caché acertaba o si se estaban
+# pagando esos 11.800 tokens enteros en cada turno.
+#
+# Importa para decidir: si el caché acierta, recortar el esquema por turnos sería CONTRAPRODUCENTE
+# (un esquema que cambia cada turno no se cachea, y saldría más caro que el completo cacheado). Si
+# NO acierta, entonces sí valdría la pena. Esto convierte esa discusión en un dato.
+_uso = {"llamadas": 0, "entrada": 0, "cacheados": 0, "salida": 0}
+
+
+def _registrar_uso(resp):
+    try:
+        u = getattr(resp, "usage", None)
+        if u is None:
+            return
+        entrada = int(getattr(u, "prompt_tokens", 0) or 0)
+        salida = int(getattr(u, "completion_tokens", 0) or 0)
+        # El nombre del campo varía entre proveedores; se prueban los conocidos.
+        detalle = getattr(u, "prompt_tokens_details", None)
+        cacheados = 0
+        for fuente, campo in ((detalle, "cached_tokens"), (u, "cached_tokens"),
+                              (u, "cache_read_input_tokens")):
+            if fuente is None:
+                continue
+            valor = fuente.get(campo) if isinstance(fuente, dict) else getattr(fuente, campo, None)
+            if valor:
+                cacheados = int(valor)
+                break
+        _uso["llamadas"] += 1
+        _uso["entrada"] += entrada
+        _uso["cacheados"] += cacheados
+        _uso["salida"] += salida
+        if entrada:
+            print(f"⧉ tokens: entrada {entrada:,} (cacheados {cacheados:,} = "
+                  f"{cacheados / entrada:.0%}) | salida {salida:,}")
+    except Exception:
+        pass          # medir jamás debe romper un turno
+
+
+def uso_acumulado():
+    """Resumen de lo consumido en esta sesión, para saber si el caché está sirviendo de algo."""
+    if not _uso["llamadas"]:
+        return "Todavía no he hecho ninguna consulta al modelo en esta sesión, señor."
+    ent, cac = _uso["entrada"], _uso["cacheados"]
+    return (f"{_uso['llamadas']} consultas al modelo, señor: {ent:,} tokens de entrada "
+            f"({cac:,} cacheados, {cac / ent:.0%}) y {_uso['salida']:,} de salida. "
+            f"Media de {ent // _uso['llamadas']:,} de entrada por consulta.")
 
 
 def proceso_de_ia(texto_de_whisper):
