@@ -5,15 +5,17 @@ import os
 from datetime import datetime
 from Voz_Slide.Herramientas_del_asistente import hablado_del_asistente
 from Funciones_Slide.Comunicacion.Funciones_Variadas import Enviar_mensaje_Whatsapp, llamada_whatsapp, colgar
+from Funciones_Slide.Productividad.Gestion_datos import RUTA_TAREAS, leer_tareas, escribir_tareas
+
+
 def monitor_de_tareas():
     while True:
         # Si todavia no hay archivo de tareas, esperamos y reintentamos (no crashea).
-        if not os.path.exists("tareas.json"):
+        if not os.path.exists(RUTA_TAREAS):
             time.sleep(30)
             continue
 
-        with open("tareas.json","r") as f:
-            tareas = json.load(f)
+        tareas = leer_tareas()
         tiempo = datetime.now().strftime("%d/%m %H:%M")
         cambio = False
 
@@ -33,8 +35,7 @@ def monitor_de_tareas():
                 i["estado"]="completado"
                 cambio = True
         if cambio == True:
-            with open("tareas.json","w") as f:
-                json.dump(tareas,f,indent=4)
+            escribir_tareas(tareas)
             if not hubo_notificacion:
                 hablado_del_asistente("Se completo la tarea, señor ")
 

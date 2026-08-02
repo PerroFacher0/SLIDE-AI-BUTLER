@@ -38,7 +38,9 @@ def _buscar_salida():
             sound.play(prueba, SAMPLE_RATE_OUT, device=i, blocking=True)
             print(f"Salida de audio: [{i}] {d['name'][:40]}")
             return i
-        except:
+        except Exception:
+            # 'except Exception', no 'except:' pelado: este bucle prueba un dispositivo tras otro
+            # y con el pelado se tragaba tambien el Ctrl+C, dejando el arranque imposible de cortar.
             continue
     return None
 
@@ -58,7 +60,7 @@ def buscar_microfono():
                        input=True, frames_per_buffer=512, input_device_index=i)
             s.stop_stream(); s.close()
             return True
-        except:
+        except Exception:
             return False
 
     encontrado = None
@@ -255,7 +257,11 @@ def hablado_del_asistente(texto_final):
             listener.start()
 
         cola = queue.Queue()
-        hilo = threading.Thread(target=_generar_audio, args=(frases[0], cola))
+        # daemon=True aunque se les haga join(): si Marco INTERRUMPE a media frase, se sale del
+        # bucle dejando sin unir el hilo que ya estaba generando la siguiente. Sin daemon, Python
+        # espera a ese hilo huérfano al cerrar el proceso — justo lo que hacía que "Salir" se
+        # sintiera colgado. El join() de abajo funciona igual con hilos daemon.
+        hilo = threading.Thread(target=_generar_audio, args=(frases[0], cola), daemon=True)
         hilo.start()
 
         interrumpido = False
@@ -264,7 +270,8 @@ def hablado_del_asistente(texto_final):
             audios = cola.get()
 
             if i + 1 < len(frases):
-                hilo = threading.Thread(target=_generar_audio, args=(frases[i + 1], cola))
+                hilo = threading.Thread(target=_generar_audio, args=(frases[i + 1], cola),
+                                        daemon=True)
                 hilo.start()
 
             for audio in audios:

@@ -65,6 +65,12 @@ def recargar_modelo_voz():
 microfono_encontrado = buscar_microfono()
 _calibrado = False
 
+# El .wav de trabajo vive SIEMPRE en la carpeta del proyecto, pase lo que pase con el
+# directorio desde el que se haya lanzado AIDEN.
+_RUTA_TEMP_WAV = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "archivo_temporal_voz.wav"
+)
+
 
 # --- Guardia anti-alucinaciones de Whisper ---------------------------------
 # Cuando Whisper recibe SILENCIO o ruido (un suspiro, el ventilador, la calle, la tele baja)
@@ -148,16 +154,19 @@ def escuchador_de_usuario(timeout=15):
     audio_capturar = instancia.listen(source, phrase_time_limit=50, timeout=timeout)
     marcar_fin_peticion()   # terminaste de hablar -> arranca el cronometro de respuesta
     print("Fin de la conversacion, procesando...")
-  if audio_capturar is not None: 
-   with open("archivo_temporal_voz.wav","wb") as x:
+  if audio_capturar is not None:
+   # Ruta ABSOLUTA: con el nombre suelto, el .wav se escribía en el directorio de trabajo, que no
+   # tiene por qué ser el del proyecto (arranque automático, acceso directo, tarea programada).
+   # Ahí iba dejando basura en carpetas ajenas, y si esa carpeta no era escribible, la voz moría.
+   with open(_RUTA_TEMP_WAV, "wb") as x:
      x.write(audio_capturar.get_wav_data())
-    
+
    _t0 = time.perf_counter()
    # vad_filter: el Silero interno de faster-whisper descarta el audio SIN voz antes de
    # transcribir -> mata casi todas las alucinaciones de silencio.
    # condition_on_previous_text=False: evita que arrastre/repita texto fantasma.
    segmentos,_ = _asegurar_modelo().transcribe(
-       "archivo_temporal_voz.wav", language="es",
+       _RUTA_TEMP_WAV, language="es",
        vad_filter=True, condition_on_previous_text=False,
        no_speech_threshold=0.6, log_prob_threshold=-1.0,
    )

@@ -103,8 +103,41 @@ def Buscar_en_Google(Pagina):
    webbrowser.open(f"https://www.google.com/search?q={busqueda_limpia}")
    return f"Buscando {Pagina} en Google, señor"
 
-def Salir():
-   sys.exit()
+def Salir(demora=3.0):
+   """HERRAMIENTA: cierra AIDEN de verdad.
+
+   Antes esto era un `sys.exit()` a secas, y por eso "salir" no cerraba nada: las herramientas se
+   ejecutan en un HILO de trabajo, y sys.exit() solo lanza SystemExit EN ESE HILO — lo recogía el
+   manejador de errores del cerebro y el proceso seguía tan vivo como antes. Con Qt corriendo en el
+   hilo principal y una veintena de hilos de fondo, la única salida fiable es pedirle a Qt que
+   cierre y, pase lo que pase, terminar el proceso.
+
+   La demora existe para que alcance a DESPEDIRSE: se devuelve la frase, AIDEN la dice, y el
+   proceso muere después."""
+   import threading
+
+   def _apagar():
+      time.sleep(max(0.5, float(demora)))
+      # 1) Cierre limpio de Qt (quita el icono de la bandeja como es debido). invokeMethod es la
+      #    forma segura de pedirlo desde otro hilo; llamar a quit() directo desde aquí no lo es.
+      try:
+         from PySide6.QtWidgets import QApplication
+         from PySide6.QtCore import QMetaObject, Qt as _Qt
+         app = QApplication.instance()
+         if app is not None:
+            QMetaObject.invokeMethod(app, "quit", _Qt.QueuedConnection)
+            time.sleep(1.0)
+      except Exception:
+         pass
+      # 2) Garantía: os._exit no espera a ningún hilo ni a ningún bucle de eventos.
+      try:
+         sys.stdout.flush()
+      except Exception:
+         pass
+      os._exit(0)
+
+   threading.Thread(target=_apagar, daemon=True).start()
+   return "Hasta luego, señor. Apagando."
 
 def Programacion_de_Tareas(texto):
    texto = texto.strip()
@@ -119,22 +152,20 @@ def Programacion_de_Tareas(texto):
       guardar_en_json(accion,target,info,hora)
 
 def limpiar_historial():
-   if not os.path.exists("tareas.json"):
+   from Funciones_Slide.Productividad.Gestion_datos import RUTA_TAREAS, leer_tareas, escribir_tareas
+
+   if not os.path.exists(RUTA_TAREAS):
       return "No hay historial de tareas que limpiar, señor."
 
-   with open("tareas.json","r") as f:
-      tareas = json.load(f)
+   tareas = leer_tareas()
+   # Se conservan solo las pendientes: lo que ya se hizo se va.
+   tarea_limpia = [t for t in tareas if t.get("estado") == "pendiente"]
+   escribir_tareas(tarea_limpia)
 
-   tarea_limpia = []
-
-   for t in tareas:
-      if t["estado"] == "pendiente":
-         tarea_limpia.append(t)
-
-   with open("tareas.json","w") as f:
-      json.dump(tarea_limpia,f,indent=4)
-
-   return "Historial limpiado, señor."
+   borradas = len(tareas) - len(tarea_limpia)
+   if not borradas:
+      return "No había nada completado que limpiar, señor."
+   return f"Historial limpiado, señor: quité {borradas} tarea(s) ya completadas."
 
 
 
