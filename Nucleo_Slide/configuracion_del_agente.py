@@ -15,6 +15,8 @@ from Funciones_Slide.Comunicacion.Telegram_Control import avisar_al_celular
 from Nucleo_Slide.Memoria_Visual import memoria_visual
 from Funciones_Slide.Sistema.Vigilante_Eventos import esperar_evento
 from Funciones_Slide.Sistema.Hardware_Externo import hardware
+from Funciones_Slide.Sistema.Elevacion import permisos
+from Funciones_Slide.Sistema.Office import office
 from Funciones_Slide.Productividad.Metas import gestionar_metas
 from Nucleo_Slide.Memoria_RAG import recordar
 from Funciones_Slide.Info.Investigacion import investigar
@@ -375,13 +377,14 @@ tools = [
         "type": "function",
         "function": {
             "name": "dictar",
-            "description": "Escribe un texto donde esté el cursor de Marco (en el campo o documento activo). Úsala cuando Marco te dicte algo para escribir: 'escribe...', 'dicta...', 'pon...' en un documento, chat o buscador.",
+            "description": "Escribe donde este el cursor de Marco (campo o documento activo). Con 'texto' escribe ESO una vez: 'escribe...', 'pon...'. Con continuo=true entra en modo DICTADO: se queda escuchando y va escribiendo TODO lo que Marco diga, frase por frase y TAL CUAL, hasta que diga 'fin del dictado' — usa continuo=true cuando pida 'tomame dictado', 'voy a dictarte algo largo', 'escribe lo que te voy diciendo'. En ese modo el texto NO pasa por ti: sale como el lo dijo. NO la uses para REDACTAR un texto tu mismo a partir de un tema (eso es redactar_documento).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "texto": {"type": "string", "description": "El texto a escribir."}
+                    "texto": {"type": "string", "description": "El texto a escribir (para una sola vez)."},
+                    "continuo": {"type": "boolean", "description": "true = modo dictado: escribe todo lo que Marco vaya diciendo hasta que pare."}
                 },
-                "required": ["texto"]
+                "required": []
             }
         }
     },
@@ -765,6 +768,39 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "permisos",
+            "description": "Los permisos con los que corre AIDEN en Windows. Usala cuando algo falle por FALTA DE PERMISOS de administrador, o cuando Marco pregunte si va como admin. accion='elevar' se reabre como administrador (a Marco le sale UN dialogo de Windows que debe aceptar el; despues ya no vuelve a salir). accion='arranque' deja que arranque elevado solo al iniciar sesion, sin mas dialogos. OJO: el dialogo del UAC vive en un escritorio aislado por el kernel y NINGUNA herramienta puede pulsarlo — por eso la salida es elevarse ANTES, no intentar clicarlo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "accion": {"type": "string", "description": "estado (por defecto) | elevar | arranque | quitar_arranque"}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "office",
+            "description": "Trabaja DENTRO de Excel o Word directamente, sin clicar en la pantalla: leer o escribir una celda concreta, añadir texto a un documento, guardar, o resumir que hay. Usala siempre que la tarea sea sobre una HOJA DE CALCULO o un DOCUMENTO ('pon 1500 en la celda B4', '¿que dice la celda A1?', 'guarda el Excel', 'añade este parrafo al documento'). Es mas fiable que controlar_pantalla para esto: no depende de que la celda este visible ni de acertar el clic. Trabaja sobre lo que Marco YA tiene abierto salvo que se le de un archivo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "programa": {"type": "string", "description": "excel | word"},
+                    "accion": {"type": "string", "description": "leer | escribir | guardar | resumen"},
+                    "celda": {"type": "string", "description": "Solo Excel: la celda o rango (ej. 'B4', 'A1:C10')."},
+                    "valor": {"type": "string", "description": "Que escribir."},
+                    "hoja": {"type": "string", "description": "Solo Excel: nombre de la hoja. Vacio = la activa."},
+                    "archivo": {"type": "string", "description": "Solo si hay que ABRIRLO. Si ya esta abierto, dejar vacio."}
+                },
+                "required": ["programa", "accion"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "hardware",
             "description": "Habla con la placa fisica (ESP32/Arduino) conectada por USB: LED de estado que se ve de reojo, reles para encender luces, y pantallita. Usala si Marco menciona su placa, el LED, la lampara del escritorio o el panel fisico. OJO: si no hay placa conectada lo dice y no pasa nada, no insistas.",
             "parameters": {
@@ -1028,6 +1064,8 @@ tools_map = {
     "avisar_al_celular": avisar_al_celular,
     "esperar_evento": esperar_evento,
     "hardware": hardware,
+    "permisos": permisos,
+    "office": office,
     "gestionar_metas": gestionar_metas,
     "recordar": recordar,
     "investigar": investigar,

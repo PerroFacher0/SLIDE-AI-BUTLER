@@ -346,7 +346,7 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     _registrar(descripcion, comando)
     nota = _nota_preguntas(contestadas)
     if n_errores and error:
-        return f"El comando terminó con error, señor{nota}: {error[:400]}"
+        return f"El comando terminó con error, señor{nota}: {error[:400]}{_nota_permisos(error)}"
     if not salida and not error:
         return f"Hecho, señor{nota}. (Sin salida que reportar.)"
     resultado = salida or error
@@ -454,6 +454,31 @@ def _registrar(descripcion, comando):
         registrar_evento(f"Ejecuté en el PC: {descripcion or comando[:60]}", "control_total")
     except Exception:
         pass
+
+
+# Un fallo por FALTA DE PERMISOS se veía como un error cualquiera de PowerShell, así que AIDEN lo
+# repetía tal cual ("Access is denied") y ahí moría la conversación. Es un caso con salida concreta
+# —elevarse— y por tanto merece decirse con esas palabras.
+_SIN_PERMISOS = re.compile(
+    r"acceso denegado|access is denied|requires elevation|requiere elevaci|unauthorizedaccess|"
+    r"no est[aá] autorizado|permissiondenied|se necesitan privilegios|administrator privileges",
+    re.I)
+
+
+def _nota_permisos(texto):
+    if not _SIN_PERMISOS.search(texto or ""):
+        return ""
+    try:
+        from Funciones_Slide.Sistema.Elevacion import soy_admin
+        if soy_admin():
+            # Ya se corre elevado: entonces no es cuestión de permisos de administrador, y decir
+            # "deme permisos" sería mandar a Marco por un camino que no lleva a ninguna parte.
+            return (" (Ya voy como administrador, señor, así que esto no es cosa de elevarme: el "
+                    "archivo o el servicio está protegido o en uso por otro programa.)")
+    except Exception:
+        pass
+    return (" — Eso falló por falta de permisos de administrador, señor. Dígame que me eleve y lo "
+            "reintento; le saldrá un diálogo de Windows que tendrá que aceptar usted.")
 
 
 def _nota_preguntas(contestadas):

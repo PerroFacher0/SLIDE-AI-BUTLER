@@ -1,6 +1,7 @@
 import os
 import time
 import ctypes
+import threading
 from datetime import datetime
 import pyautogui
 
@@ -18,7 +19,101 @@ _CARPETAS = {
 }
 
 
-def dictar(texto):
+# ── DICTADO CONTINUO ─────────────────────────────────────────────────────────
+# Hasta ahora escribir por voz era: Marco dice una frase -> ronda completa del LLM -> AIDEN escribe
+# esa frase. Para un párrafo largo eso son diez rondas, diez esperas y diez oportunidades de que el
+# modelo "mejore" lo dicho. Para REDACTAR hablando de corrido hace falta lo contrario: transcribir
+# y pegar, frase a frase, SIN que el LLM toque nada en medio. Aquí la fidelidad importa más que la
+# inteligencia — lo dictado es de Marco, no del modelo.
+#
+# Se corta diciendo una frase de cierre, o con el freno de siempre (Ctrl+Alt+P).
+_FRASES_FIN = ("fin del dictado", "para de escribir", "deja de escribir", "termina el dictado",
+               "fin de dictado", "para el dictado", "ya termine", "ya terminé", "listo aiden")
+# Signos que se dicen en voz alta y no se escriben solos.
+_PUNTUACION = {"punto y aparte": ".\n", "punto y seguido": ". ", "punto final": ".",
+               "nueva linea": "\n", "nueva línea": "\n", "salto de linea": "\n",
+               "salto de línea": "\n", "punto": ". ", "coma": ", ",
+               "dos puntos": ": ", "punto y coma": "; ",
+               "signo de interrogacion": "?", "signo de interrogación": "?",
+               "abre parentesis": " (", "cierra parentesis": ") "}
+
+_dictando = {"activo": False}
+
+
+def _limpiar_frase(frase):
+    """Convierte los signos DICHOS en signos escritos y deja la frase lista para pegar."""
+    t = " " + str(frase or "").strip() + " "
+    bajo = t.lower()
+    # De más largo a más corto: "punto y aparte" antes que "punto", o se rompería en pedazos.
+    for dicho in sorted(_PUNTUACION, key=len, reverse=True):
+        idx = bajo.find(" " + dicho + " ")
+        while idx != -1:
+            t = t[:idx] + _PUNTUACION[dicho] + t[idx + len(dicho) + 2:]
+            bajo = t.lower()
+            idx = bajo.find(" " + dicho + " ")
+    # strip(" \t") y NO strip(): un strip pelado se comía el salto de línea recién puesto, así que
+    # un "punto y aparte" AL FINAL de la frase — que es justo como se cierra un párrafo dictando —
+    # perdía el salto y el párrafo siguiente se pegaba al anterior.
+    return t.strip(" \t")
+
+
+def _bucle_dictado(hablar=None):
+    from Nucleo_Slide import Cancelacion
+    from Voz_Slide.Transcriptor import escuchador_de_usuario, es_alucinacion
+
+    escritas = 0
+    try:
+        with Cancelacion.operacion("el dictado continuo"):
+            while _dictando["activo"]:
+                Cancelacion.revisar()
+                frase = escuchador_de_usuario(timeout=30)
+                if not frase or es_alucinacion(frase):
+                    continue                       # silencio o ruido: se sigue escuchando
+                if any(f in frase.lower() for f in _FRASES_FIN):
+                    break
+                texto = _limpiar_frase(frase)
+                if not texto:
+                    continue
+                dictar(texto + " ")
+                escritas += 1
+    except Cancelacion.Cancelado:
+        pass
+    except Exception as e:
+        print(f"[dictado] se corto: {e}")
+    _dictando["activo"] = False
+    fin = (f"Dictado cerrado, señor: {escritas} frase(s) escritas."
+           if escritas else "Cerré el dictado sin escribir nada, señor.")
+    if callable(hablar):
+        try:
+            hablar(fin)
+        except Exception:
+            pass
+    return fin
+
+
+def dictado_continuo(hablar=None):
+    """Arranca el modo dictado: todo lo que Marco diga se escribe tal cual, hasta que diga que
+    pare. No pasa por el LLM en ningún momento — lo dictado sale como se dijo."""
+    if _dictando["activo"]:
+        return "Ya estoy tomando dictado, señor. Dígame 'fin del dictado' cuando termine."
+    _dictando["activo"] = True
+    threading.Thread(target=_bucle_dictado, args=(hablar,), daemon=True).start()
+    return ("Le tomo el dictado, señor: hable con calma y voy escribiendo. Diga 'punto', 'coma' o "
+            "'nueva línea' para los signos, y 'fin del dictado' cuando termine.")
+
+
+def detener_dictado():
+    if not _dictando["activo"]:
+        return "No estaba tomando dictado, señor."
+    _dictando["activo"] = False
+    return "Dictado detenido, señor."
+
+
+def dictar(texto="", continuo=False):
+    """Escribe donde esté el cursor. Con continuo=True entra en modo DICTADO: todo lo que Marco
+    diga se va escribiendo tal cual hasta que diga 'fin del dictado'."""
+    if continuo:
+        return dictado_continuo()
     # Escribe 'texto' en donde esté el cursor. Usa el portapapeles (Ctrl+V) para que
     # los acentos y caracteres especiales salgan bien, y luego restaura lo que había.
     texto = str(texto)
