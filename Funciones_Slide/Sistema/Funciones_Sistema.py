@@ -144,17 +144,23 @@ def ver_apps_abiertas():
 
 # ── CLIMA ─────────────────────────────────────────────────────────────────────
 def obtener_clima(ciudad):
+    # timeout OBLIGATORIO. Sin él, requests espera indefinidamente: si wttr.in no responde (se cayó,
+    # va lento, o el wifi murió a media petición), el turno de voz se quedaba colgado ahí para
+    # siempre — y ni siquiera se podía cancelar, porque el hilo estaba bloqueado dentro del socket.
+    # Es de las tools más usadas, así que era de los cuelgues más probables de todo el proyecto.
+    # (10s conectando, 10s leyendo: de sobra para un servicio que devuelve una línea de texto.)
     try:
-
-        url =  f"https://wttr.in/{ciudad}?format=3"
-        respuesta = requests.get(url)
-
+        url = f"https://wttr.in/{ciudad}?format=3"
+        respuesta = requests.get(url, timeout=(10, 10))
         if respuesta.status_code == 200:
             return f"El clima actual es: {respuesta.text.strip()}"
-        else:
-            return f"No se pudo obtener el clima"
-    except Exception as e:
-        return f"Ocurrio un error al conectar: {e}"
+        return "No pude consultar el clima ahora mismo, señor: el servicio no respondió bien."
+    except requests.Timeout:
+        return "El servicio del clima está tardando demasiado, señor; lo dejé pasar."
+    except requests.RequestException:
+        return "No pude conectarme para consultar el clima, señor. ¿Tiene internet?"
+    except Exception:
+        return "Ocurrió un problema al consultar el clima, señor."
 
 
 # ── BUSQUEDA EN INTERNET (DuckDuckGo, sin API key) ────────────────────────────

@@ -34,12 +34,19 @@ def _run(args):
 
 
 def _cmd(args, timeout=20):
+    # Lo que devuelve esto acaba, en varias funciones, dentro de la frase que AIDEN DICE. Un
+    # "error: WinError 2" en mitad de una respuesta hablada no le dice nada a nadie; se traduce a
+    # algo que se entienda al oírlo.
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
                            encoding="utf-8", errors="replace")
         return (r.stdout or r.stderr or "").strip()
-    except Exception as e:
-        return f"error: {e}"
+    except subprocess.TimeoutExpired:
+        return "el comando de Windows tardó demasiado y lo corté"
+    except FileNotFoundError:
+        return "esa utilidad de Windows no está disponible en este equipo"
+    except Exception:
+        return "Windows no me dejó ejecutar eso"
 
 
 # ── RED / CONECTIVIDAD ────────────────────────────────────────────────────────

@@ -216,6 +216,22 @@ def _a_la_papelera(que):
         return f"No pude enviarlo a la papelera, señor: {e}"
 
 
+_MAX_ARCHIVOS_ZIP = 20000     # tope duro: por encima de esto ya no es "comprime esa carpeta"
+
+
+class _DemasiadosArchivos(Exception):
+    pass
+
+
+def _borrar_a_medias(ruta):
+    """Un .zip cortado a la mitad parece un archivo bueno hasta que se intenta abrir."""
+    try:
+        if ruta and os.path.exists(ruta):
+            os.remove(ruta)
+    except OSError:
+        pass
+
+
 def _comprimir(que, destino=""):
     ruta = _resolver(que)
     if ruta is None:
@@ -227,21 +243,44 @@ def _comprimir(que, destino=""):
         salida = os.path.join(os.path.dirname(ruta), salida)
     try:
         import zipfile
+        from Nucleo_Slide import Cancelacion
         n = 0
-        with zipfile.ZipFile(salida, "w", zipfile.ZIP_DEFLATED) as z:
-            if os.path.isdir(ruta):
-                for base, _dirs, files in os.walk(ruta):
-                    for f in files:
-                        completo = os.path.join(base, f)
-                        z.write(completo, os.path.relpath(completo, os.path.dirname(ruta)))
-                        n += 1
-            else:
-                z.write(ruta, os.path.basename(ruta))
-                n = 1
+        # Comprimir una carpeta grande puede tardar minutos, y hasta ahora no había forma de
+        # pararlo: el bucle recorría todo el árbol sin mirar atrás. Ahora se revisa la cancelación
+        # entre archivos (Ctrl+Alt+P) y se deja un tope duro, para que un "comprime mi carpeta de
+        # proyectos" apuntando sin querer a algo enorme no secuestre el turno de voz.
+        with Cancelacion.operacion(f"comprimir {os.path.basename(ruta)}"):
+            with zipfile.ZipFile(salida, "w", zipfile.ZIP_DEFLATED) as z:
+                if os.path.isdir(ruta):
+                    for base, _dirs, files in os.walk(ruta):
+                        for f in files:
+                            if Cancelacion.cancelado():
+                                raise Cancelacion.Cancelado()
+                            if n >= _MAX_ARCHIVOS_ZIP:
+                                raise _DemasiadosArchivos()
+                            completo = os.path.join(base, f)
+                            z.write(completo, os.path.relpath(completo, os.path.dirname(ruta)))
+                            n += 1
+                else:
+                    z.write(ruta, os.path.basename(ruta))
+                    n = 1
         mb = os.path.getsize(salida) / 1e6
         return (f"Comprimí {n} archivo(s) en «{os.path.basename(salida)}» ({mb:.1f} MB), señor: "
                 f"{salida}")
+    except _DemasiadosArchivos:
+        _borrar_a_medias(salida)
+        return (f"Esa carpeta tiene más de {_MAX_ARCHIVOS_ZIP} archivos, señor; lo dejé estar antes "
+                "de quedarme minutos ahí. Dígame una subcarpeta más concreta.")
     except Exception as e:
+        # Cancelado entra por aquí: el .zip a medias se borra, para no dejar un archivo roto que
+        # parezca bueno.
+        _borrar_a_medias(salida)
+        try:
+            from Nucleo_Slide import Cancelacion
+            if isinstance(e, Cancelacion.Cancelado):
+                return "Dejé de comprimir, señor, y borré el archivo a medias."
+        except Exception:
+            pass
         return f"No pude comprimirlo, señor: {e}"
 
 
