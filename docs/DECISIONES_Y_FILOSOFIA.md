@@ -95,8 +95,18 @@
 - **Pendiente crítico**: la API key vieja quedó en el HISTORIAL de git (repo público) → hay que **rotarla**.
 
 ## D17 — Nada de tkinter para el splash
-- **Elección**: el splash NO usa tkinter.
-- **Por qué**: causaba un crash fatal. (Vigilancia con auto-arranque también queda off.)
+- **Elección**: el splash NO se usa. Causaba un crash fatal. (Vigilancia con auto-arranque también
+  queda off.)
+- **Aclaración (revisado en agosto 2026)**: la decisión se aplicó **quitando la llamada, no el
+  archivo**. `Interfaz/Pantalla_Carga.py` sigue en el repo y sigue importando tkinter, lo cual a
+  primera vista contradice esta decisión — pero **nadie lo importa**: las únicas menciones a
+  `Pantalla_Carga` están dentro de su propio docstring, en el ejemplo de uso. Está desconectado, así
+  que hoy el riesgo es cero.
+- **Qué NO hacer**: volver a engancharlo a `Main.py` / `Main_AlwaysOn.py`. Eso reintroduce
+  exactamente el crash que motivó esta decisión. Si algún día hace falta un splash, hay que
+  rehacerlo en PySide6 (que ya es dependencia y es lo que usa todo lo demás), no reactivar este.
+- **Por qué no se borra**: no molesta a nadie y guarda el trabajo de la animación por si se
+  reescribe. Queda avisado en la cabecera del propio archivo.
 
 ## D18 — Estética holográfica plata, en UN solo módulo
 - **Contexto**: la paleta anterior era gris monocromo plano, y cada superficie la implementaba por

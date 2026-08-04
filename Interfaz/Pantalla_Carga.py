@@ -1,5 +1,15 @@
 """Pantalla de carga (splash) de AIDEN.
 
+⚠️  DESCONECTADO A PROPOSITO — NO LO VUELVAS A ENGANCHAR. Ver D17 en
+    docs/DECISIONES_Y_FILOSOFIA.md.
+
+    Este splash usa tkinter y causaba un CRASH FATAL al arrancar. La decision se aplico quitando la
+    llamada desde Main.py, no borrando el archivo: hoy NADIE lo importa (comprobado), asi que el
+    riesgo es cero mientras siga asi. El codigo se conserva por la animacion, no porque se use.
+
+    Si algun dia hace falta un splash, hay que REHACERLO en PySide6 —que ya es dependencia y es lo
+    que usan la Mira, el overlay y la esfera— en vez de reactivar este.
+
 Vive aparte de Main.py para no ensuciarlo. Solo usa librerias livianas
 (tkinter / threading / math), asi que importarla es instantaneo.
 
