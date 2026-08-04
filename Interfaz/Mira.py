@@ -107,6 +107,7 @@ def marcar(x, y, etiqueta="", esperar=True):
 
 
 def _construir():
+    from Interfaz import _Estilo as _E          # la paleta y las primitivas, compartidas
     from PySide6.QtWidgets import QWidget
     from PySide6.QtCore import Qt, QTimer
     from PySide6.QtGui import QPainter, QPen, QColor, QFont, QGuiApplication
@@ -154,19 +155,18 @@ def _construir():
             for c in cajas:
                 x1, y1 = c["x1"] - ox, c["y1"] - oy
                 w, h = max(2, c["x2"] - c["x1"]), max(2, c["y2"] - c["y1"])
-                p.setBrush(Qt.NoBrush)
-                p.setPen(QPen(QColor(255, 255, 255, 230), 2))
-                p.drawRoundedRect(x1 - 3, y1 - 3, w + 6, h + 6, 4, 4)
+                # El recuadro señalador NO se rellena: taparía justo lo que se está señalando.
+                _E.borde_resplandor(p, _E.panel_chamferado((x1 - 3, y1 - 3, w + 6, h + 6), corte=6))
                 if c["etiqueta"]:
-                    f = QFont(); f.setPointSize(9); p.setFont(f)
-                    ancho = p.fontMetrics().horizontalAdvance(c["etiqueta"]) + 16
+                    p.setFont(_E.fuente(9))
+                    ancho = p.fontMetrics().horizontalAdvance(c["etiqueta"]) + 20
                     # La etiqueta va encima salvo que no quepa; entonces baja.
-                    ey = y1 - 26 if y1 > 30 else y1 + h + 6
-                    p.setPen(Qt.NoPen)
-                    p.setBrush(QColor(16, 16, 18, 214))
-                    p.drawRoundedRect(x1 - 3, ey, ancho, 22, 5, 5)
-                    p.setPen(QColor(240, 240, 240, 240))
-                    p.drawText(x1 + 5, ey + 15, c["etiqueta"])
+                    ey = y1 - 28 if y1 > 32 else y1 + h + 8
+                    ruta = _E.panel_chamferado((x1 - 3, ey, ancho, 23), corte=5)
+                    _E.rellenar_panel(p, ruta)
+                    _E.borde_resplandor(p, ruta, intensidad=0.75)
+                    p.setPen(_E.color(_E.TEXTO))
+                    p.drawText(x1 + 6, ey + 16, c["etiqueta"])
 
             for m in marcas:
                 queda = max(0.0, m["hasta"] - time.time()) / _TTL
@@ -175,14 +175,14 @@ def _construir():
                 radio = int(12 + 34 * queda)
                 alfa = int(90 + 145 * queda)
                 p.setBrush(Qt.NoBrush)
-                p.setPen(QPen(QColor(235, 235, 235, alfa), 2))
+                p.setPen(QPen(_E.color(_E.ACENTO, alfa), 2))
                 p.drawEllipse(x - radio, y - radio, radio * 2, radio * 2)
-                p.setPen(QPen(QColor(255, 255, 255, alfa), 1))
+                p.setPen(QPen(_E.color(_E.ACENTO_BRILLO, alfa), 1))
                 p.drawLine(x - 9, y, x + 9, y)
                 p.drawLine(x, y - 9, x, y + 9)
                 if m["etiqueta"]:
-                    f = QFont(); f.setPointSize(9); p.setFont(f)
-                    p.setPen(QColor(255, 255, 255, min(235, alfa + 40)))
+                    p.setFont(_E.fuente(9))
+                    p.setPen(_E.color(_E.ACENTO_BRILLO, min(235, alfa + 40)))
                     p.drawText(x + radio + 8, y + 4, m["etiqueta"])
 
             # Carteles flotantes: apilados arriba al centro, donde no estorban al trabajo.
@@ -194,8 +194,8 @@ def _construir():
             for c in carteles:
                 lineas = str(c["texto"]).split("\n") or [""]
                 titulo = c.get("titulo") or ""
-                f_tit = QFont(); f_tit.setPointSize(11); f_tit.setBold(True)
-                f_txt = QFont(); f_txt.setPointSize(11)
+                f_tit = _E.fuente(11, negrita=True)
+                f_txt = _E.fuente(11)
 
                 p.setFont(f_tit)
                 ancho = p.fontMetrics().horizontalAdvance(titulo) if titulo else 0
@@ -203,44 +203,50 @@ def _construir():
                 fm = p.fontMetrics()
                 for l in lineas:
                     ancho = max(ancho, fm.horizontalAdvance(l))
-                ancho = min(self.width() - 80, ancho + 34)
+                ancho = min(self.width() - 80, ancho + 40)
                 alto_linea = fm.height() + 3
-                alto = 16 + (26 if titulo else 0) + len(lineas) * alto_linea
+                alto = 20 + (26 if titulo else 0) + len(lineas) * alto_linea
                 cx = (self.width() - ancho) // 2
 
-                p.setPen(Qt.NoPen)
-                p.setBrush(QColor(14, 14, 16, 226))
-                p.drawRoundedRect(cx, arriba, ancho, alto, 9, 9)
+                ruta = _E.panel_chamferado((cx, arriba, ancho, alto))
+                _E.rellenar_panel(p, ruta)
+                _E.borde_resplandor(p, ruta)
+                # La línea de escaneo recorre el cartel mientras dura: un panel quieto parece una
+                # captura pegada en la pantalla; moviéndose se lee como algo vivo.
+                _E.linea_escaneo(p, (cx, arriba, ancho, alto), (time.time() * 0.35) % 1.0)
 
-                y = arriba + 10
+                y = arriba + 12
                 if titulo:
                     p.setFont(f_tit)
-                    p.setPen(QColor(255, 255, 255, 250))
+                    p.setPen(_E.color(_E.ACENTO_BRILLO))
                     y += fm.ascent()
-                    p.drawText(cx + 17, y, titulo)
-                    # Filete tenue para separar el título de los datos, sin dibujar una caja más.
-                    p.setPen(QPen(QColor(255, 255, 255, 60), 1))
-                    p.drawLine(cx + 17, y + 7, cx + ancho - 17, y + 7)
+                    # El título SÍ va en mayúsculas: es una etiqueta corta, no contenido.
+                    p.drawText(cx + 18, y, _E.etiqueta(titulo))
+                    p.setPen(QPen(_E.color(_E.ACENTO, 70), 1))
+                    p.drawLine(cx + 18, y + 7, cx + ancho - 18, y + 7)
                     y += 16
                 p.setFont(f_txt)
-                p.setPen(QColor(238, 238, 238, 245))
+                p.setPen(_E.color(_E.TEXTO, 245))
                 for l in lineas:
                     y += fm.ascent()
-                    p.drawText(cx + 17, y, l)
+                    # El contenido va TAL CUAL: son datos que ya formateó una herramienta.
+                    p.drawText(cx + 18, y, l)
                     y += alto_linea - fm.ascent()
-                arriba += alto + 8
+                arriba += alto + 10
                 arriba += 48
 
             if _estado_txt:
-                f = QFont(); f.setPointSize(9); f.setLetterSpacing(QFont.PercentageSpacing, 108)
+                f = _E.fuente(9)
+                f.setLetterSpacing(QFont.PercentageSpacing, 112)
                 p.setFont(f)
-                ancho = p.fontMetrics().horizontalAdvance(_estado_txt) + 26
+                texto = _E.etiqueta(_estado_txt)      # 'ESCUCHANDO': etiqueta corta, va en mayúsculas
+                ancho = p.fontMetrics().horizontalAdvance(texto) + 30
                 caja_x, caja_y = self.width() - ancho - 26, self.height() - 54
-                p.setPen(Qt.NoPen)
-                p.setBrush(QColor(16, 16, 18, 168))
-                p.drawRoundedRect(caja_x, caja_y, ancho, 26, 13, 13)
-                p.setPen(QColor(224, 224, 224, 232))
-                p.drawText(caja_x + 13, caja_y + 18, _estado_txt)
+                ruta = _E.panel_chamferado((caja_x, caja_y, ancho, 27), corte=7)
+                _E.rellenar_panel(p, ruta)
+                _E.borde_resplandor(p, ruta, intensidad=0.6)
+                p.setPen(_E.color(_E.ACENTO_BRILLO, 235))
+                p.drawText(caja_x + 15, caja_y + 19, texto)
             p.end()
 
     return _Mira()

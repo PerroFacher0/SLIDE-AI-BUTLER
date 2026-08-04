@@ -27,18 +27,40 @@ REFRESCO_MS = 1200     # cadencia del CONTENIDO (barato: son unos archivos json 
 ANIM_MS = 60            # cadencia del latido (puro dibujo vectorial, casi gratis)
 _MAX_EVENTOS = 1
 
-# Paleta MONOCROMA (a pedido de Marco: "más serio... gris tonalizado, blanco o plateado"). Nada de
-# arcoíris: el MOMENTO de Marco se lee por el BRILLO de un mismo gris/plata neutro, no por el matiz
-# — normal es plata en calma; lo que pide silencio (reunión/gaming) se atenúa; lo que pide atención
-# (taller, y sobre todo una misión activa) se aclara hasta el blanco. Mismos datos; más serio.
-_TEMAS = {
-    "normal":  (198, 198, 198, "en línea"),
-    "reunion": (146, 146, 146, "reunión"),
-    "taller":  (224, 224, 224, "taller"),
-    "agente":  (255, 255, 255, "misión"),
-    "gaming":  (128, 128, 128, "gaming"),
-    "ausente": (96, 96, 96, "ausente"),
+from Interfaz import _Estilo as _E
+
+# El MOMENTO de Marco se lee por el BRILLO, nunca por el matiz: normal es plata en calma; lo que
+# pide silencio (reunión/gaming/ausente) se atenúa; lo que pide atención (taller, y sobre todo una
+# misión activa) se aclara. Esa lógica no cambia — lo único que cambia es de qué color se atenúa.
+#
+# Antes cada modo era un gris suelto; ahora los seis son EL MISMO plata del resto de AIDEN a
+# distinta intensidad. Se conservan exactamente las proporciones de antes (255, 224, 198, 146, 128,
+# 96 sobre 255), así que los seis modos siguen separados igual de bien — solo que ahora el overlay
+# y la Mira son obviamente la misma herramienta.
+_INTENSIDAD = {
+    "agente":  1.00,   # misión en curso: lo más brillante, pide que lo mires
+    "taller":  0.88,
+    "normal":  0.78,
+    "reunion": 0.57,   # de aquí para abajo, AIDEN se aparta
+    "gaming":  0.50,
+    "ausente": 0.38,
 }
+_ETIQUETAS = {"normal": "en línea", "reunion": "reunión", "taller": "taller",
+              "agente": "misión", "gaming": "gaming", "ausente": "ausente"}
+
+
+def _tema(modo):
+    i = _INTENSIDAD.get(modo, _INTENSIDAD["normal"])
+    r, g, b = _E.ACENTO
+    return (int(r * i), int(g * i), int(b * i), _ETIQUETAS.get(modo, "en línea"))
+
+
+_TEMAS = {m: _tema(m) for m in _INTENSIDAD}
+
+
+def _intensidad_de(rgb):
+    """De vuelta al 0..1, para modular el resplandor del borde con el mismo criterio."""
+    return max(0.25, min(1.0, rgb[0] / max(1, _E.ACENTO[0])))
 
 
 def _estado():
@@ -170,10 +192,10 @@ class OverlayJarvis(QWidget):
 
         # Fondo grafito, borde NEUTRO y casi invisible (el color vive en el latido y el estado, no
         # en el marco): así el panel se siente premium y tranquilo, no "todo teñido".
-        self.setStyleSheet(
-            "QWidget { background: rgba(13,13,14,215); border: 1px solid rgba(255,255,255,22);"
-            " border-radius: 14px; }"
-        )
+        # Sin fondo ni borde en la hoja de estilo: el panel lo pinta paintEvent con el chaflán
+        # compartido. Si se dejara aquí un borde redondeado, se vería POR DEBAJO del chaflán y
+        # quedaría un doble contorno con dos formas distintas.
+        self.setStyleSheet("QWidget { background: transparent; border: none; }")
         self.resize(ANCHO, ALTO)
         self._reposicionar()
 
@@ -222,21 +244,20 @@ class OverlayJarvis(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         self.style().drawPrimitive(QStyle.PE_Widget, opt, p, self)
-        self._dibujar_filo(p)
+        self._dibujar_panel(p)
         self._dibujar_latido(p)
         p.end()
 
-    def _dibujar_filo(self, p: QPainter):
-        # Filo de "cristal": un hilo de luz muy tenue justo bajo el borde superior — profundidad
-        # sin ruido (nada que gire ni barra, solo una insinuación de que el panel tiene volumen).
-        w = self.width()
-        grad = QLinearGradient(0, 0, w, 0)
-        grad.setColorAt(0.0, QColor(255, 255, 255, 0))
-        grad.setColorAt(0.5, QColor(255, 255, 255, 26))
-        grad.setColorAt(1.0, QColor(255, 255, 255, 0))
-        pen = QPen(QBrush(grad), 1.1)
-        p.setPen(pen)
-        p.drawLine(QPointF(14, 1.3), QPointF(w - 14, 1.3))
+    def _dibujar_panel(self, p: QPainter):
+        # El panel: mismo chaflán y mismo resplandor que la Mira, y la INTENSIDAD del borde sube o
+        # baja con el modo — así "cuánta atención pide" se nota antes de leer una sola palabra.
+        rect = (1.0, 1.0, self.width() - 2.0, self.height() - 2.0)
+        ruta = _E.panel_chamferado(rect, corte=12)
+        _E.rellenar_panel(p, ruta)
+        _E.borde_resplandor(p, ruta, intensidad=_intensidad_de(self._rgb_entero()))
+        # La misma línea de escaneo de los carteles, MUY lenta aquí: el overlay está siempre a la
+        # vista, y algo que se mueve rápido delante todo el día cansa.
+        _E.linea_escaneo(p, rect, (self._fase * 0.0016) % 1.0)
 
     def _dibujar_latido(self, p: QPainter):
         # El elemento animado central: un latido suave (respira) cuyo COLOR se desliza hacia el

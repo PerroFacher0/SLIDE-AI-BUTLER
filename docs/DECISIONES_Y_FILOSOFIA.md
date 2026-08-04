@@ -98,6 +98,34 @@
 - **Elección**: el splash NO usa tkinter.
 - **Por qué**: causaba un crash fatal. (Vigilancia con auto-arranque también queda off.)
 
+## D18 — Estética holográfica plata, en UN solo módulo
+- **Contexto**: la paleta anterior era gris monocromo plano, y cada superficie la implementaba por
+  su cuenta: la Mira con rectángulos redondeados, el overlay con su hoja de estilo, la esfera con
+  sus variables CSS. Tres versiones del mismo gris — cada retoque había que hacerlo tres veces, así
+  que tarde o temprano una se quedaba atrás y el conjunto se veía descosido.
+- **Elección**: `Interfaz/_Estilo.py` como única fuente. Fondo casi negro neutro `RGBA(21,22,26,240)`
+  y UN acento plata desaturado `#DCE1E6` (`#F2F4F6` para la línea más viva del borde). Geometría
+  angular: paneles con las esquinas cortadas en diagonal — un redondeado dice "aplicación", un corte
+  recto dice "instrumento". El resplandor se hace dibujando el borde **cuatro veces** (ancho y casi
+  invisible → fino y brillante), no con desenfoque real.
+- **Por qué el glow por capas y no `QGraphicsBlurEffect`**: el desenfoque de verdad rehace la textura
+  en cada repintado, y esto se repinta ~25 veces por segundo encima de lo que Marco esté haciendo.
+  Cuatro trazos cuestan casi nada y se ven igual.
+- **Descartado**: cian y azul eléctrico saturados. Se probaron y se sintieron artificiales, de HUD
+  de videojuego; esto es una herramienta que Marco tiene delante todo el día. El cian sigue en el
+  selector de la esfera, pero ya no es lo que se ve al arrancar.
+- **Se mantiene la regla de siempre**: un acento a la vez, nada de arcoíris. El rojo y el verde
+  quedan reservados **solo** para valores que suben o bajan — si además decoraran, dejarían de
+  significar algo.
+- **Los modos del overlay no cambian de lógica**: se siguen leyendo por BRILLO (misión > taller >
+  normal > reunión > gaming > ausente), conservando exactamente las proporciones de antes; lo único
+  que cambia es que ahora se atenúa el plata en vez de un gris suelto.
+- **Mayúsculas solo en etiquetas cortas** ("ESCUCHANDO", "PERCIBE"), nunca en contenido: un dato ya
+  formateado por una herramienta (`NVDA $128.50 +3.2%`, un asunto de correo, un nombre propio) se
+  destroza en mayúsculas y además dejaría de coincidir con lo que dice la voz.
+- **Nota**: Python y JavaScript no pueden compartir la constante, así que la esfera copia el valor
+  (`ACENTO_HEX`). Si se cambia en un lado, hay que cambiarlo en el otro — está dicho en ambos.
+
 ---
 
 ### Para la wiki

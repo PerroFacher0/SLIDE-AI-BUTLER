@@ -7,9 +7,11 @@
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --aq:#00e5cc;--dim:#00796e;--bg:#020b0d;
-  --txt:#b0ede8;--mute:#1e524d;
-  --aq-r:0;--aq-g:229;--aq-b:204;
+  /* Plata #DCE1E6: el mismo acento que Interfaz/_Estilo.py da a la Mira y al overlay. Si aquí se
+     cambia, hay que cambiarlo allí — Python y JS no pueden compartir la constante, solo el valor. */
+  --aq:#DCE1E6;--dim:#7d8489;--bg:#0a0b0d;
+  --txt:#e6e9ec;--mute:#3a3e42;
+  --aq-r:220;--aq-g:225;--aq-b:230;
 }
 body,html{
   width:100%;height:100%;overflow:hidden;
@@ -410,6 +412,12 @@ const TAU = Math.PI * 2;
 // ── PALETA DE COLORES ─────────────────────────────────────────────────────────
 // Cada entrada: [nombre, hex, r, g, b, dimHex, bgHex, mutehex]
 const PALETTES = [
+  // PLATA es la de casa: el MISMO acento que usan la Mira y el overlay (Interfaz/_Estilo.py,
+  // ACENTO_HEX = #DCE1E6). Va primera porque es la que se carga al arrancar — así las tres
+  // superficies de AIDEN se ven de la misma familia sin que Marco tenga que elegir nada.
+  // El cian de antes sigue disponible en el selector, pero ya no es el que se ve por defecto:
+  // se probó como identidad y resultaba artificial, de HUD de videojuego.
+  { name:'Plata',   hex:'#DCE1E6', r:220, g:225, b:230, dim:'#7d8489', bg:'#0a0b0d', mute:'#3a3e42', txt:'#e6e9ec' },
   { name:'Aqua',    hex:'#00e5cc', r:0,   g:229, b:204, dim:'#00796e', bg:'#020b0d', mute:'#1e524d', txt:'#b0ede8' },
   { name:'Amarillo',hex:'#f5d800', r:245, g:216, b:0,   dim:'#a08e00', bg:'#0c0b00', mute:'#4a4200', txt:'#ede8a0' },
   { name:'Morado',  hex:'#b46fff', r:180, g:111, b:255, dim:'#6b3faa', bg:'#07020d', mute:'#3a2060', txt:'#d4b0f0' },
@@ -421,7 +429,7 @@ const PALETTES = [
 ];
 let currentPalette = PALETTES[0];
 // Guardamos rgb del color activo para usarlo en canvas (sin parsear cada frame)
-let AQ_R = 0, AQ_G = 229, AQ_B = 204;
+let AQ_R = 220, AQ_G = 225, AQ_B = 230;   // plata #DCE1E6, igual que _Estilo.ACENTO
 
 function applyPalette(p) {
   currentPalette = p;
@@ -490,7 +498,9 @@ document.addEventListener('click', () =>
       const ty = sy * cRX - sz * sRX; sz = sy * sRX + sz * cRX; sy = ty;
       const sc = (sz + 2) / 3;
       xp.beginPath(); xp.arc(CX + sx * R * sc, CY + sy * R * sc, 0.7 + sc * 1.4, 0, TAU);
-      xp.fillStyle = `rgba(0,229,204,${0.12 + sc * .72})`; xp.fill();
+      // Usa el acento ACTIVO, no un cian escrito a mano: si no, al cambiar de paleta este efecto
+      // se quedaba en el color viejo y desentonaba con todo lo demás.
+      xp.fillStyle = `rgba(${AQ_R},${AQ_G},${AQ_B},${0.12 + sc * .72})`; xp.fill();
     }
     tp += .013;
   }
