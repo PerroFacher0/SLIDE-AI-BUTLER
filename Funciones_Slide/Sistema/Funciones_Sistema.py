@@ -137,6 +137,12 @@ def ver_apps_abiertas():
                 titulos.append(t)
         if not titulos:
             return "No detecté ventanas de aplicaciones abiertas, señor."
+        # Veinte títulos de ventana leídos en voz alta son inservibles; en pantalla se ojean.
+        try:
+            from Nucleo_Slide import HUD
+            HUD.tarjeta("Ventanas abiertas", titulos[:20], segundos=9)
+        except Exception:
+            pass
         return "Ventanas/aplicaciones abiertas: " + ", ".join(titulos[:20])
     except Exception as e:
         return f"No pude listar las aplicaciones, señor: {e}"
@@ -280,6 +286,12 @@ def estado_sistema():
         partes.append("sin conexión de red detectada")
     if not partes:
         return "No pude leer el estado del sistema, señor."
+    # Cuatro o cinco medidas seguidas se atropellan al oírlas; en una tarjeta se comparan de golpe.
+    try:
+        from Nucleo_Slide import HUD
+        HUD.tarjeta("Estado del equipo", partes, segundos=8)
+    except Exception:
+        pass
     return "Estado del equipo: " + ", ".join(partes) + "."
 
 

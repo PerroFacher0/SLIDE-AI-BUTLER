@@ -159,6 +159,26 @@ def mi_portafolio():
         f"TOTAL: invertiste {total_costo:.2f} USD, hoy vale {total_valor:.2f} USD, "
         f"{verbo} {abs(total_pl):.2f} ({abs(total_pct):.2f}%)"
     )
+    # Además de decirlo, DEJARLO EN PANTALLA. Cinco cifras seguidas ("NVDA a ciento veintiocho con
+    # cincuenta, más tres coma dos por ciento, AAPL a doscientos veinticuatro...") no hay forma de
+    # retenerlas de oído: se olvidan antes de que termine la frase. Verlas sí sirve.
+    # Se arma una versión CORTA para el cartel: en pantalla cabe poco y se lee de un vistazo.
+    try:
+        from Nucleo_Slide import HUD
+        filas = []
+        for simbolo in simbolos:
+            p = precios.get(simbolo)
+            if p is None:
+                continue
+            pos = PORTAFOLIO[simbolo]
+            val = pos["acciones"] * p
+            pct = ((p - pos["precio_compra"]) / pos["precio_compra"] * 100) if pos["precio_compra"] else 0
+            filas.append(f"{simbolo:<6} ${p:,.2f}   {pct:+.1f}%   ({val:,.0f} USD)")
+        if filas:
+            filas.append(f"{'TOTAL':<6} ${total_valor:,.0f}   {total_pct:+.1f}%")
+            HUD.tarjeta("Tu portafolio", filas, segundos=10)
+    except Exception:
+        pass          # el cartel es un extra: si falla, la respuesta hablada sigue intacta
     return "\n".join(lineas)
 
 

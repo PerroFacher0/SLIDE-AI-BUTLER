@@ -202,6 +202,16 @@ def resumen_gastos(periodo="mes"):
     detalle = "; ".join(f"{c}: {int(v):,}".replace(",", ".") for c, v in top if c)
     total_fmt = f"{int(total):,}".replace(",", ".")
     cola = f" Lo más fuerte: {detalle}." if detalle else ""
+    # El dinero es de lo que peor se oye: "cuatrocientos treinta y dos mil ochocientos" no se
+    # retiene. En pantalla, además, se ve de un vistazo en qué se fue.
+    try:
+        from Nucleo_Slide import HUD
+        filas = [f"{c[:22]:<22} {int(v):>12,}".replace(",", ".")
+                 for c, v in sorted(por.items(), key=lambda x: -x[1])[:6] if c]
+        filas.append(f"{'TOTAL':<22} {int(total):>12,}".replace(",", ".") + f"  {moneda}")
+        HUD.tarjeta(f"Gastos — {etiqueta}", filas, segundos=10)
+    except Exception:
+        pass
     return f"{etiqueta.capitalize()} lleva gastados {total_fmt} {moneda}, señor, en {n} movimientos.{cola}"
 
 

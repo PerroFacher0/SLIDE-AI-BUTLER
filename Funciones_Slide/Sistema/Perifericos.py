@@ -165,6 +165,14 @@ def bateria_perifericos():
     bajos = [n for n, p in lecturas if p <= 20]
     if bajos:
         aviso = f" Ojo con {', '.join(bajos)}, va bajo."
+    # Varios dispositivos con su porcentaje: se comparan mucho mejor viéndolos en columna.
+    try:
+        from Nucleo_Slide import HUD
+        HUD.tarjeta("Batería de periféricos",
+                    [f"{n:<28} {p:>3}%" for n, p in sorted(lecturas, key=lambda x: x[1])],
+                    segundos=8)
+    except Exception:
+        pass
     return "Batería de periféricos, señor: " + "; ".join(partes) + aviso
 
 

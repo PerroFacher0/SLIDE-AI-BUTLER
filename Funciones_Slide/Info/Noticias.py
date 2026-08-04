@@ -38,4 +38,14 @@ def noticias_del_dia(tema=None):
         partes.append(linea)
 
     encabezado = f"Titulares sobre {consulta}:" if tema else "Titulares de hoy:"
+    # En el cartel van SOLO los titulares, sin el resumen de cada noticia: en pantalla se ojean los
+    # seis de un vistazo y ahí se decide cuál interesa. El detalle ya lo dice la voz.
+    try:
+        from Nucleo_Slide import HUD
+        titulares = [f"· {(r.get('title') or '').strip()[:70]}" for r in resultados
+                     if (r.get("title") or "").strip()]
+        if titulares:
+            HUD.tarjeta(encabezado.rstrip(":"), titulares, segundos=10)
+    except Exception:
+        pass
     return encabezado + "\n" + "\n".join(partes)

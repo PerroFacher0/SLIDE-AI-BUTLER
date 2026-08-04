@@ -141,6 +141,14 @@ def revisar_correo(cuantos=5):
         M.logout()
         if not correos:
             return "No tiene correos sin leer, señor."
+        # Remitente + asunto de varios correos: escuchado se mezcla todo; leído se decide en dos
+        # segundos cuál abrir. (Van solo los encabezados, no el cuerpo: eso es correo de Marco.)
+        try:
+            from Nucleo_Slide import HUD
+            HUD.tarjeta(f"{len(correos)} correo(s) sin leer",
+                        [c.lstrip("- ") for c in correos], segundos=10)
+        except Exception:
+            pass
         return f"Tiene {len(correos)} correo(s) sin leer, señor:\n" + "\n".join(correos)
     except imaplib.IMAP4.error:
         return ("No pude entrar a su correo, señor: revise el usuario o la clave de aplicacion en "
@@ -209,6 +217,14 @@ def agenda_hoy(dia="hoy"):
     eventos.sort(key=lambda e: e[0])
     cuando = "Mañana" if objetivo != date.today() else "Hoy"
     partes = [f"{e[0].strftime('%H:%M')} {e[1][:50]}" for e in eventos]
+    # Una agenda dicha de corrido ("a las nueve, a las once y media, a la una...") obliga a Marco a
+    # ir memorizando horas. En columna se ve de un golpe qué tiene y cuánto hueco le queda.
+    try:
+        from Nucleo_Slide import HUD
+        HUD.tarjeta(f"{cuando} en tu agenda",
+                    [f"{e[0].strftime('%H:%M')}   {e[1][:46]}" for e in eventos], segundos=10)
+    except Exception:
+        pass
     return f"{cuando} tiene, señor: " + "; ".join(partes) + "."
 
 
