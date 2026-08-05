@@ -550,6 +550,9 @@ let speakPulse     = 0.0;
 
 // Amplitud REAL del audio de Kokoro (empujada desde Python en tiempo real)
 let voiceTarget = 0.0, voiceLevel = 0.0, _voiceLastT = 0;
+// Nivel de ENTRADA (el microfono de Marco). Deliberadamente aparte de voiceLevel: uno es AIDEN
+// hablando y el otro es AIDEN oyendo — si compartieran variable se verian igual.
+let micTarget = 0.0, micLevel = 0.0, _micLastT = 0;
 
 const N_SPHERE = 290, N_AMB = 200, N_STARS = 220, N_HEX = 32, N_BARS = 36;
 const sPts = [], ambPts = [], stars = [], hexPts = [], rings = [];
@@ -626,6 +629,9 @@ function loop() {
   // Nivel de voz real: si Python deja de enviar (>220ms), decae para no quedar pegado
   if (performance.now() - _voiceLastT > 220) voiceTarget *= .80;
   voiceLevel += (voiceTarget - voiceLevel) * .45;
+  // Igual para la entrada: si Python deja de mandar (dejo de escuchar), se apaga sola.
+  if (performance.now() - _micLastT > 260) micTarget *= .78;
+  micLevel += (micTarget - micLevel) * .40;
   // Empuje de deformación: la amplitud real manda; piso leve al estar respondiendo
   const voiceDrive = Math.max(speakIntensity * .12, voiceLevel);
 
@@ -645,6 +651,30 @@ function loop() {
   const R = AQ_R, G = AQ_G, B = AQ_B;
   const aqMain  = `rgb(${R},${G},${B})`;
   const aqFull  = (a) => `rgba(${R},${G},${B},${a})`;
+
+  // ── ANILLO DE ESCUCHA (entrada) ─────────────────────────────────────────────
+  // La voz de SALIDA hincha el orbe hacia AFUERA (SR crece con voiceLevel). La de ENTRADA hace lo
+  // CONTRARIO: un anillo que se cierra hacia adentro segun lo fuerte que hable Marco. Asi las dos
+  // señales viven en la misma esfera sin confundirse — una empuja, la otra recoge.
+  // Solo se dibuja mientras hay algo que oir: en silencio desaparece del todo, para que no parezca
+  // que AIDEN esta escuchando cuando no lo esta.
+  if (micLevel > 0.02) {
+    const rIn = SR * (1.62 - micLevel * 0.42);   // fuerte = mas cerca del orbe
+    MX.save();
+    MX.strokeStyle = aqFull(0.10 + micLevel * 0.42);
+    MX.lineWidth = 1 + micLevel * 1.6;
+    MX.beginPath(); MX.arc(CX, CY, rIn, 0, TAU); MX.stroke();
+    // Cuatro marcas en los ejes: dan la referencia de cuanto se ha cerrado el anillo.
+    MX.strokeStyle = aqFull(0.18 + micLevel * 0.55);
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2 + tp * 0.15;
+      MX.beginPath();
+      MX.moveTo(CX + Math.cos(a) * (rIn - 5), CY + Math.sin(a) * (rIn - 5));
+      MX.lineTo(CX + Math.cos(a) * (rIn + 5), CY + Math.sin(a) * (rIn + 5));
+      MX.stroke();
+    }
+    MX.restore();
+  }
 
   // ── 1. ESTRELLAS ────────────────────────────────────────────────────────────
   MX.fillStyle = aqMain;
@@ -919,6 +949,14 @@ function setVoiceLevel(v) {
   v = +v || 0;
   voiceTarget = v < 0 ? 0 : (v > 1 ? 1 : v);
   _voiceLastT = performance.now();
+}
+
+// Llamado desde Python: nivel (0-1) del MICROFONO mientras AIDEN escucha a Marco.
+// Canal distinto a setVoiceLevel — ver la nota de micTarget.
+function setMicLevel(v) {
+  v = +v || 0;
+  micTarget = v < 0 ? 0 : (v > 1 ? 1 : v);
+  _micLastT = performance.now();
 }
 
 // Llamado desde Python  ← FIRMA INTACTA

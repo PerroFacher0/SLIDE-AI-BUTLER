@@ -141,6 +141,56 @@ def _texto_confiable(segmentos):
     return "".join(partes).strip()
 
 
+# ── NIVEL DE ENTRADA (la voz de MARCO, no la de AIDEN) ───────────────────────
+# La esfera ya reacciona a la voz de SALIDA (Kokoro). Esto es la señal contraria: cuánto le está
+# entrando a AIDEN por el micrófono mientras escucha. Van por canales SEPARADOS a propósito: si
+# compartieran uno, "estoy hablando" y "te estoy oyendo" se verían igual.
+#
+# CÓMO, y por qué así: la primera idea era reescribir el bucle de captura para leer los chunks a
+# mano. Se descartó — `listen()` no solo lee: decide cuándo empezó y terminó la frase con su
+# umbral de energía, su pause_threshold y su energía dinámica. Reimplementar eso es reimplementar
+# el oído de AIDEN, y cualquier diferencia se paga en transcripciones peores.
+#
+# En vez de eso se ENVUELVE el stream. `_listen()` lee por `source.stream.read(...)`; aquí se pone
+# un intermediario que reenvía la llamada, mide de paso, y devuelve los MISMOS bytes. `listen()`
+# recibe exactamente lo que recibía antes y su lógica no se toca ni una línea.
+_mic_callback = None
+
+
+def set_mic_callback(fn):
+    """La interfaz registra aquí su puente hacia la esfera. Sin interfaz, esto queda en None y
+    todo lo de abajo no cuesta nada."""
+    global _mic_callback
+    _mic_callback = fn
+
+
+class _EspiaNivel:
+    """Deja pasar el audio INTACTO y publica su nivel de camino."""
+
+    def __init__(self, real):
+        self._real = real
+        self._pico = 1500.0        # referencia móvil: se adapta a lo fuerte que hable Marco
+
+    def read(self, size):
+        datos = self._real.read(size)
+        try:
+            if _mic_callback is not None and datos:
+                import numpy as _np
+                m = _np.frombuffer(datos, dtype=_np.int16)
+                if m.size:
+                    rms = float(_np.sqrt(_np.mean(m.astype(_np.float32) ** 2)))
+                    # El pico sube deprisa y baja despacio: así una voz normal llena la barra sin
+                    # que un portazo la deje sorda durante medio minuto.
+                    self._pico = max(rms, self._pico * 0.995, 800.0)
+                    _mic_callback(max(0.0, min(1.0, rms / self._pico)))
+        except Exception:
+            pass                    # medir NUNCA puede estropear la captura
+        return datos               # ← los bytes salen tal cual entraron
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)     # lo demás (close, etc.) pasa de largo
+
+
 def escuchador_de_usuario(timeout=15):
  global _calibrado
  try:
@@ -151,7 +201,15 @@ def escuchador_de_usuario(timeout=15):
         instancia.adjust_for_ambient_noise(source, duration=0.5)
         _calibrado = True
     print("Escuchandote....")
+    # El espía se pone DESPUÉS de calibrar: adjust_for_ambient_noise también lee del stream, y
+    # ese ruido de fondo no es voz de Marco — pintarlo sería mentir sobre lo que se está oyendo.
+    source.stream = _EspiaNivel(source.stream)
     audio_capturar = instancia.listen(source, phrase_time_limit=50, timeout=timeout)
+    if _mic_callback is not None:
+        try:
+            _mic_callback(0.0)      # dejó de hablar: la esfera vuelve a su sitio
+        except Exception:
+            pass
     marcar_fin_peticion()   # terminaste de hablar -> arranca el cronometro de respuesta
     print("Fin de la conversacion, procesando...")
   if audio_capturar is not None:

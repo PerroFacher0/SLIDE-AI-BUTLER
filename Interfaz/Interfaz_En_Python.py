@@ -10,6 +10,7 @@ from PySide6.QtCore import QTimer, QEventLoop
 
 
 from Voz_Slide.Herramientas_del_asistente import set_voz_callback
+from Voz_Slide.Transcriptor import set_mic_callback
 
 _funcion_texto_externa = None
 _funcion_voz_externa = None
@@ -64,6 +65,9 @@ class SlideHUD(QMainWindow):
     senal_texto = Signal(str, str)
     senal_estado = Signal(str)
     senal_voz = Signal(float)
+    # Canal PROPIO para la entrada. Compartirlo con senal_voz haria que 'AIDEN habla'
+    # y 'AIDEN me oye' se vieran igual, que es justo lo que hay que distinguir.
+    senal_mic = Signal(float)
     pedir_mostrar = Signal()   # always-on: pedir mostrar la ventana desde otro hilo
     pedir_ocultar = Signal()   # always-on: ocultar la ventana ya (comando "ocultate")
     pedir_fijar = Signal(bool) # always-on: fijar/soltar la ventana (comando "quedate")
@@ -116,8 +120,10 @@ class SlideHUD(QMainWindow):
         self.senal_texto.connect(self._ejecutar_js_texto)
         self.senal_estado.connect(self._ejecutar_js_estado)
         self.senal_voz.connect(self._ejecutar_js_voz)
+        self.senal_mic.connect(self._ejecutar_js_mic)
         # La esfera imitará la amplitud real del audio de Kokoro
         set_voz_callback(self.enviar_nivel_voz)
+        set_mic_callback(self.enviar_nivel_mic)
 
         # ── Always-on ────────────────────────────────────────────────────────
         # modo_persistente: si es True, cerrar la ventana NO la destruye (la oculta)
@@ -179,6 +185,17 @@ class SlideHUD(QMainWindow):
     def _ejecutar_js_voz(self, nivel):
         self.browser.page().runJavaScript(f"setVoiceLevel({nivel});")
         self._reiniciar_timer()   # mientras AIDEN habla, no se cierra la ventana
+
+    def enviar_nivel_mic(self, nivel):
+        # Lo llama el hilo de captura de voz; la señal cruza al hilo de Qt sola.
+        try:
+            self.senal_mic.emit(float(nivel))
+        except RuntimeError:
+            pass
+
+    def _ejecutar_js_mic(self, nivel):
+        self.browser.page().runJavaScript(f"setMicLevel({nivel});")
+        self._reiniciar_timer()   # mientras MARCO habla, tampoco se cierra la ventana
     def mostrar_interfaz(self, mostrar: bool):
         comando_js = "toggleInterfaz(true);" if mostrar else "toggleInterfaz(false);"
         self.browser.page().runJavaScript(comando_js)
