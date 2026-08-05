@@ -93,6 +93,101 @@ def limpiar():
     return True
 
 
+# ── FLASH DE ESCANEO ─────────────────────────────────────────────────────────
+# Cuando AIDEN captura la pantalla para mirarla, hoy no se nota nada. Un barrido de luz muy breve
+# lo vuelve visible: Marco sabe que le acaban de mirar la pantalla y CUÁNDO. Importa porque una
+# captura es lo más parecido a que alguien se asome por encima del hombro.
+_flash = {"hasta": 0.0, "duracion": 0.30}
+
+
+def flash_escaneo(duracion_ms=300):
+    """Un barrido de plata sobre todos los monitores. Dispara y vuelve: no bloquea la captura."""
+    if not _activa:
+        return False
+    with _lock:
+        _flash["duracion"] = max(0.08, duracion_ms / 1000.0)
+        _flash["hasta"] = time.time() + _flash["duracion"]
+    return True
+
+
+# ── CINTA DE PASOS ───────────────────────────────────────────────────────────
+# Un turno puede encadenar varias herramientas. Sin nada que lo muestre, un turno de cuatro pasos y
+# uno colgado se ven exactamente igual: silencio. La cinta dice cuántos son y por cuál va.
+#
+# Con UNA sola herramienta no se dibuja: no hay progreso que enseñar, solo estorbo.
+_pasos = {"nombres": [], "actual": -1, "saltados": set()}
+
+
+def actualizar_pasos(pasos, actual_idx=0):
+    nombres = [str(p)[:18] for p in (pasos or [])]
+    with _lock:
+        _pasos["nombres"] = nombres if len(nombres) > 1 else []
+        _pasos["actual"] = actual_idx
+    return bool(_activa and len(nombres) > 1)
+
+
+def marcar_paso(idx):
+    with _lock:
+        _pasos["actual"] = idx
+
+
+def limpiar_pasos():
+    with _lock:
+        _pasos["nombres"], _pasos["actual"] = [], -1
+        _pasos["saltados"].clear()
+
+
+def paso_saltado(idx):
+    """True si Marco pidió saltarse ESE paso (Ctrl+Alt+1..9 mientras corre la tanda).
+
+    La 'X' clicable que se pensó al principio no es posible aquí: la Mira es click-through a
+    propósito — nunca intercepta el ratón, para no quitarle a Marco un clic en lo que esté
+    haciendo. Volverla clicable rompería esa garantía en TODA la superficie, por un botón. El
+    teclado consigue lo mismo sin tocar el ratón, y encaja con el Ctrl+Alt+P que ya existe."""
+    with _lock:
+        return idx in _pasos["saltados"]
+
+
+def _vigilar_saltos():
+    """Sondea Ctrl+Alt+1..9 mientras hay una tanda en curso. Mismo enfoque que Cancelacion."""
+    import ctypes
+    while True:
+        time.sleep(0.06)
+        with _lock:
+            if not _pasos["nombres"]:
+                return
+            total = len(_pasos["nombres"])
+        try:
+            u = ctypes.windll.user32
+            if not (u.GetAsyncKeyState(0x11) & 0x8000 and u.GetAsyncKeyState(0x12) & 0x8000):
+                continue
+            for i in range(min(9, total)):
+                if u.GetAsyncKeyState(0x31 + i) & 0x8000:      # '1'..'9'
+                    with _lock:
+                        _pasos["saltados"].add(i)
+        except Exception:
+            return
+
+
+# ── ANCLA DE VIGILANCIA ──────────────────────────────────────────────────────
+# Cuando AIDEN se queda esperando algo de una ventana concreta, cuatro escuadras en sus esquinas
+# lo dicen sin ocupar sitio. Van MUY tenues a propósito: es un estado de fondo, no debe competir
+# con el panel que sí pide atención en ese momento.
+_vigiladas = {}          # hwnd -> (x1, y1, x2, y2)
+_INTENSIDAD_VIGILA = 0.45
+
+
+def marcar_vigilancia(hwnd, activo=True):
+    if not _activa or not hwnd:
+        return False
+    with _lock:
+        if not activo:
+            _vigiladas.pop(hwnd, None)
+            return True
+        _vigiladas[hwnd] = None       # el rectángulo lo refresca el reloj, para que siga a la ventana
+    return True
+
+
 def marcar(x, y, etiqueta="", esperar=True):
     """Marca el punto (x, y) en pantalla. Si 'esperar', duerme MS_ANTES para que se alcance a ver.
     Devuelve al toque si Qt no está corriendo — nunca bloquea una acción por culpa del HUD."""
@@ -110,7 +205,8 @@ def _construir():
     from Interfaz import _Estilo as _E          # la paleta y las primitivas, compartidas
     from PySide6.QtWidgets import QWidget
     from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QPainter, QPen, QColor, QFont, QGuiApplication
+    from PySide6.QtGui import (QPainter, QPen, QColor, QFont, QGuiApplication,
+                               QLinearGradient)
 
     class _Mira(QWidget):
         def __init__(self):
@@ -141,16 +237,62 @@ def _construir():
                 _cola[:] = [m for m in _cola if m["hasta"] > ahora]
                 _cajas[:] = [c for c in _cajas if c["hasta"] > ahora]
                 _mensajes[:] = [m for m in _mensajes if m["hasta"] > ahora]
+                vigiladas = list(_vigiladas)
+            # Se relee el rectángulo de cada ventana vigilada para que las escuadras la SIGAN si
+            # Marco la mueve. Si la ventana desapareció, se deja de vigilar sola.
+            if vigiladas:
+                try:
+                    import win32gui
+                    for h in vigiladas:
+                        try:
+                            r = win32gui.GetWindowRect(h)
+                            with _lock:
+                                if h in _vigiladas:
+                                    _vigiladas[h] = r
+                        except Exception:
+                            with _lock:
+                                _vigiladas.pop(h, None)
+                except Exception:
+                    pass
             self.update()
 
         def paintEvent(self, _e):
+            ahora = time.time()
             with _lock:
                 marcas, cajas, carteles = list(_cola), list(_cajas), list(_mensajes)
-            if not marcas and not cajas and not carteles and not _estado_txt:
+                pasos = list(_pasos["nombres"])
+                paso_actual, saltados = _pasos["actual"], set(_pasos["saltados"])
+                vigiladas = [r for r in _vigiladas.values() if r]
+                flash_queda = max(0.0, _flash["hasta"] - ahora) / _flash["duracion"]
+            if not any((marcas, cajas, carteles, pasos, vigiladas, _estado_txt)) and flash_queda <= 0:
                 return
             ox, oy = self._origen
             p = QPainter(self)
             p.setRenderHint(QPainter.Antialiasing, True)
+
+            # ── Escuadras de vigilancia: solo las 4 esquinas, no el rectángulo entero. Un marco
+            # completo alrededor de una ventana que Marco está usando sería una jaula; cuatro
+            # esquinas dicen lo mismo y dejan respirar lo de dentro.
+            for r in vigiladas:
+                x1, y1, x2, y2 = r[0] - ox, r[1] - oy, r[2] - ox, r[3] - oy
+                brazo = max(10, min(26, (x2 - x1) // 12))
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(_E.color(_E.ACENTO, int(255 * _INTENSIDAD_VIGILA * 0.55)), 1.6))
+                for ex, ey, dx, dy in ((x1, y1, 1, 1), (x2, y1, -1, 1),
+                                       (x1, y2, 1, -1), (x2, y2, -1, -1)):
+                    p.drawLine(ex, ey, ex + brazo * dx, ey)
+                    p.drawLine(ex, ey, ex, ey + brazo * dy)
+
+            # ── Flash de escaneo: un barrido que cruza TODOS los monitores de una pasada.
+            if flash_queda > 0:
+                y = int(self.height() * (1.0 - flash_queda))
+                grad = QLinearGradient(0, y - 40, 0, y + 40)
+                grad.setColorAt(0.0, _E.color(_E.ACENTO, 0))
+                grad.setColorAt(0.5, _E.color(_E.ACENTO_BRILLO, int(70 * flash_queda)))
+                grad.setColorAt(1.0, _E.color(_E.ACENTO, 0))
+                p.setPen(Qt.NoPen)
+                p.setBrush(grad)
+                p.drawRect(0, y - 40, self.width(), 80)
 
             for c in cajas:
                 x1, y1 = c["x1"] - ox, c["y1"] - oy
@@ -234,6 +376,41 @@ def _construir():
                     y += alto_linea - fm.ascent()
                 arriba += alto + 10
                 arriba += 48
+
+            # ── Cinta de pasos: una fila de mini-paneles, uno por herramienta de la tanda.
+            # El que corre AHORA lleva el resplandor entero; los hechos quedan tenues; los que
+            # faltan, solo contorno. De un vistazo se sabe cuántos son y por dónde va.
+            if pasos:
+                p.setFont(_E.fuente(8))
+                fm = p.fontMetrics()
+                anchos = [fm.horizontalAdvance(_E.etiqueta(n)) + 22 for n in pasos]
+                total = sum(anchos) + 8 * (len(pasos) - 1)
+                cx = (self.width() - total) // 2
+                cy = self.height() - 96
+                for i, (nombre, ancho) in enumerate(zip(pasos, anchos)):
+                    ruta = _E.panel_chamferado((cx, cy, ancho, 22), corte=5)
+                    _E.rellenar_panel(p, ruta)
+                    if i in saltados:
+                        # Saltado por Marco: se marca con el rojo reservado, no se disfraza de hecho.
+                        _E.borde_resplandor(p, ruta, acento=_E.BAJA, intensidad=0.55)
+                        tinta = _E.color(_E.BAJA, 200)
+                    elif i == paso_actual:
+                        _E.borde_resplandor(p, ruta, intensidad=1.0)
+                        tinta = _E.color(_E.ACENTO_BRILLO, 245)
+                    elif i < paso_actual:
+                        _E.borde_resplandor(p, ruta, intensidad=0.30)
+                        tinta = _E.color(_E.TEXTO_TENUE, 190)
+                    else:
+                        p.setBrush(Qt.NoBrush)
+                        p.setPen(QPen(_E.color(_E.ACENTO, 55), 1.0))
+                        p.drawPath(ruta)
+                        tinta = _E.color(_E.TEXTO_TENUE, 150)
+                    p.setPen(tinta)
+                    p.drawText(cx + 11, cy + 15, _E.etiqueta(nombre))
+                    if i < len(pasos) - 1:      # el hilo que une un paso con el siguiente
+                        p.setPen(QPen(_E.color(_E.ACENTO, 60), 1.0))
+                        p.drawLine(cx + ancho, cy + 11, cx + ancho + 8, cy + 11)
+                    cx += ancho + 8
 
             if _estado_txt:
                 f = _E.fuente(9)

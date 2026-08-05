@@ -216,5 +216,13 @@ try:
 except Exception as _e:
     print(f"[mira] omitida: {_e}")
 
+# TERMINAL FANTASMA: enseña lo que va escupiendo un comando LARGO mientras corre. Solo se asoma
+# si de verdad tarda (>1.5s); para los de 100ms no aparece nunca. También necesita el hilo de Qt.
+try:
+    from Interfaz.TerminalFantasma import iniciar as _iniciar_terminal
+    _iniciar_terminal()
+except Exception as _e:
+    print(f"[terminal] omitida: {_e}")
+
 # Qt corre para siempre aquí (esto es lo "always-on"); se sale solo con "Salir" del tray.
 sys.exit(app.exec())

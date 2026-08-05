@@ -164,6 +164,41 @@ def _esperar_cierre_proceso(nombre, timeout):
     return f"Pasaron {timeout} segundos y «{nombre}» sigue corriendo, señor."
 
 
+def _ventana_por_titulo(texto):
+    """hwnd de la primera ventana visible cuyo título contenga 'texto', o None."""
+    try:
+        import win32gui
+    except Exception:
+        return None
+    objetivo, halladas = str(texto or "").lower(), []
+
+    def _cb(h, _):
+        try:
+            if win32gui.IsWindowVisible(h):
+                t = (win32gui.GetWindowText(h) or "").lower()
+                if t and objetivo in t:
+                    halladas.append(h)
+        except Exception:
+            pass
+
+    try:
+        win32gui.EnumWindows(_cb, None)
+    except Exception:
+        return None
+    return halladas[0] if halladas else None
+
+
+def _marcar(hwnd, activo):
+    """Enciende o apaga las escuadras del HUD. Adorno: si no hay HUD, no pasa nada."""
+    if not hwnd:
+        return
+    try:
+        from Interfaz import Mira
+        Mira.marcar_vigilancia(hwnd, activo)
+    except Exception:
+        pass
+
+
 def esperar_evento(tipo="ventana", filtro="", timeout_segundos=60):
     """HERRAMIENTA: se queda ESPERANDO a que algo pase en el PC y avisa en cuanto ocurre.
       tipo = ventana (cambia la app en primer plano) | portapapeles (Marco copia algo) |
@@ -192,9 +227,14 @@ def esperar_evento(tipo="ventana", filtro="", timeout_segundos=60):
               "evento": threading.Event(), "encontrado": None}
     with _lock_bus:
         _esperas.append(espera)
+    # Escuadras en las esquinas de la ventana vigilada: "estoy con un ojo puesto aquí". Sin esto,
+    # esperar y estar colgado se ven igual — es decir, no se ven.
+    hwnd = _ventana_por_titulo(filtro) if (tipo_bus == "ventana_foco" and filtro) else None
+    _marcar(hwnd, True)
     try:
         llego = espera["evento"].wait(timeout=timeout)
     finally:
+        _marcar(hwnd, False)          # también si salta el timeout o Marco cancela
         with _lock_bus:
             if espera in _esperas:
                 _esperas.remove(espera)

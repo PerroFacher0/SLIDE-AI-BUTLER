@@ -115,6 +115,16 @@ def _matar_arbol(proc):
         pass
 
 
+def _term(fn, *a):
+    """Puente a la terminal fantasma. Es un ADORNO: si el HUD no está, no pasa nada y el comando
+    corre igual. Nunca puede tumbar una ejecución por no haber pantalla."""
+    try:
+        from Interfaz import TerminalFantasma
+        return getattr(TerminalFantasma, fn)(*a)
+    except Exception:
+        return None
+
+
 def _lector(flujo, acumulador, lock):
     # Lee de a un carácter para poder detectar prompts que NO terminan en salto de línea
     # (readline() se quedaría bloqueado esperando un \n que nunca llega).
@@ -264,6 +274,7 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     contestadas = a_ciegas = 0
     ultimo_largo, quieto_desde, ultima_respuesta = 0, inicio, 0.0
     corte = None
+    _term("mostrar", descripcion or comando[:52])
 
     def _responder():
         envio = pendientes.pop(0) if pendientes else por_defecto
@@ -293,6 +304,9 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
 
             ahora = _t.monotonic()
             if largo != ultimo_largo:
+                # A la terminal se le pasa SOLO lo nuevo, no el buffer entero: se reusa lo que el
+                # bucle ya sabía (cuánto creció) en vez de releer nada.
+                _term("actualizar", "".join(buf_out[ultimo_largo:largo]))
                 ultimo_largo, quieto_desde = largo, ahora
             silencio = ahora - quieto_desde
             cola = texto[-400:]
@@ -321,6 +335,7 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     # Cortar o agotar el tiempo obliga a MATAR la sesión: dentro de una sesión compartida no hay
     # forma de matar un solo comando, y dejarla viva con algo colgado envenenaría el siguiente.
     if corte in ("cancelado", "timeout", "bucle"):
+        _term("cerrar", False)      # cortado: la ventana se queda, que es cuando hay algo que leer
         salida_parcial = bruto.split(_MARCA)[0].strip()
         _matar_sesion()
         precalentar()                            # deja otra lista para la próxima
@@ -343,6 +358,7 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
         n_errores = 0
     _recordar_carpeta(carpeta.strip())
 
+    _term("cerrar", not (n_errores and error))
     _registrar(descripcion, comando)
     nota = _nota_preguntas(contestadas)
     if n_errores and error:

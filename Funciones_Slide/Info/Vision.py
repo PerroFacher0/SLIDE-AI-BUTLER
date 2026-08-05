@@ -92,10 +92,24 @@ def analizar(fuente="pantalla", consulta="", a_fondo=False):
     return analizar_pantalla(consulta)
 
 
+def _flash_escaneo():
+    """Barrido de luz que avisa a Marco de que AIDEN acaba de mirarle la pantalla.
+
+    Va DESPUÉS de la captura, no antes: el barrido se pinta en el overlay, que está EN la pantalla
+    — si se dispara primero, acaba dentro de la propia imagen que el modelo va a analizar, y AIDEN
+    se pone a interpretar su propio destello. Marco no nota los 100 ms de diferencia; la imagen sí."""
+    try:
+        from Interfaz import Mira
+        Mira.flash_escaneo()
+    except Exception:
+        pass
+
+
 def analizar_pantalla(consulta=""):
     try:
         from PIL import ImageGrab
         img = ImageGrab.grab()
+        _flash_escaneo()
         frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
     except Exception as e:
         return f"No pude capturar la pantalla, señor: {e}"

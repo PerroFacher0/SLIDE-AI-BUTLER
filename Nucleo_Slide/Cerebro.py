@@ -439,8 +439,27 @@ def _ejecutar_tanda(tool_calls_list):
         destino = lecturas if tc['function']['name'] in _TOOLS_PARALELAS else acciones
         destino.append((i, tc))
 
+    # La cinta de pasos del HUD: solo con DOS o más herramientas. Con una no hay progreso que
+    # enseñar. Es un adorno — si el HUD no está, esto no hace nada y la tanda corre igual.
+    def _hud(fn, *a):
+        try:
+            from Interfaz import Mira
+            return getattr(Mira, fn)(*a)
+        except Exception:
+            return None
+
+    if total > 1:
+        _hud("actualizar_pasos", [tc['function']['name'] for tc in tool_calls_list], 0)
+
     def _correr(par):
-        _i, tc = par
+        i, tc = par
+        _hud("marcar_paso", i)
+        # Marco puede saltarse UN paso concreto (Ctrl+Alt+1..9) sin abortar el turno entero, que es
+        # lo que hace Ctrl+Alt+P. Al modelo se le dice con todas las letras — si se le devolviera un
+        # error genérico, intentaría "arreglarlo" y volvería a lanzar justo lo que Marco descartó.
+        if total > 1 and _hud("paso_saltado", i):
+            return (f"Marco canceló este paso ({tc['function']['name']}) desde el HUD. NO lo "
+                    "reintentes: sigue con el resto y cuenta con que eso no se hizo.")
         return _ejecutar_tool_call(tc['function']['name'], tc['function']['arguments'])
 
     if len(lecturas) > 1:
@@ -454,6 +473,10 @@ def _ejecutar_tanda(tool_calls_list):
 
     for par in acciones:
         resultados[par[0]] = _correr(par)
+    # La cinta se limpia SIEMPRE al cerrar la tanda: si quedara puesta, la ronda siguiente
+    # arrancaría con los pasos de la anterior todavía en pantalla.
+    if total > 1:
+        _hud("limpiar_pasos")
     return resultados
 
 

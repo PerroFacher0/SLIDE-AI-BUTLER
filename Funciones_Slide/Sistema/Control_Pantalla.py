@@ -149,6 +149,13 @@ def _capturar_pantalla():
         except TypeError:
             img = ImageGrab.grab()                      # Pillow viejo: solo el principal
             ox = oy = 0
+        # El barrido va DESPUÉS de capturar: se pinta en el overlay, que está EN la pantalla, así
+        # que dispararlo antes lo metería dentro de la imagen que el modelo va a mirar.
+        try:
+            from Interfaz import Mira
+            Mira.flash_escaneo()
+        except Exception:
+            pass
         return img, img.size, (ox, oy)
     except Exception:
         return None, None, (0, 0)
