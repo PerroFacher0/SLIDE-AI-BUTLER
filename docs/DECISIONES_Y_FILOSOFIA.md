@@ -136,6 +136,31 @@
 - **Nota**: Python y JavaScript no pueden compartir la constante, así que la esfera copia el valor
   (`ACENTO_HEX`). Si se cambia en un lado, hay que cambiarlo en el otro — está dicho en ambos.
 
+## D19 — Una habilidad auto-programada se valida por lo que HACE, no por si compila
+- **Contexto**: `Auto_Modificacion` le pide a Claude Code que escriba una función nueva en
+  `Nucleo_Slide/Auto_Programacion.py` y la recarga **en caliente, dentro del propio proceso de
+  AIDEN**. La única puerta era `compile()`, que dice que el Python está bien escrito — no que haga
+  lo que Marco pidió. Una función con sintaxis impecable y la lógica al revés entraba igual, y a
+  partir de ahí AIDEN la ofrecía como capacidad suya.
+- **Elección**: dos puertas más, en este orden (`Nucleo_Slide/Validador_Habilidades.py`):
+  1. **Leerla antes de ejecutarla** (AST). No es una lista de prohibiciones — esa ya existe para
+     PowerShell en `Control_Total` y duplicarla aquí sería tener dos listas divergiendo. Es una
+     comprobación de **coherencia**: si Marco pidió "calcular el 19%" y la función borra carpetas,
+     algo no cuadra. Y si Marco **sí pidió** borrar, deja de ser sospechoso: se mira su instrucción,
+     no una lista fija.
+  2. **Ejecutarla de mentira, en OTRO proceso y con reloj.** Es la única forma de saber si hace lo
+     que dice. El subproceso es desechable: si la función tiene un bucle infinito, se lleva por
+     delante ese proceso y no el de AIDEN. Probarla dentro sería colgar a AIDEN para comprobar si
+     algo cuelga.
+- **El orden importa**: primero se lee, después se ejecuta. Al revés sería ejecutar código sin
+  haberlo mirado, que es justo lo que se quiere evitar.
+- **Sin paso de aprobación manual**: tras dos validaciones reales, pedirle además a Marco que
+  confirme sería fricción sin información nueva. Lo que sí se le da es el motivo **concreto** cuando
+  falla ("la prueba falló: ...", "el código borra carpetas y eso no tiene que ver con lo que pidió"),
+  no un "no funcionó" — es lo que le permite decidir si lo pide de otra forma o lo revisa él.
+- **No aplica a `proyecto`**: eso construye en un sandbox aparte y ya tiene su propio `verificar=true`.
+  Esta severidad extra es porque `Auto_Modificacion` toca el código de AIDEN **en caliente**.
+
 ---
 
 ### Para la wiki

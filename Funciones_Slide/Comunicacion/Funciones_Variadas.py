@@ -183,25 +183,43 @@ def Auto_Modificacion(nombre_habilidad, instruccion):
                 "Debe hacer: " + instruccion + ". REGLAS ESTRICTAS: no modifiques NINGUN otro archivo "
                 "ni el codigo existente; SOLO agrega la funcion nueva al final de ese archivo; "
                 "autocontenida y funcional (imports dentro de la funcion si hace falta); que DEVUELVA "
-                "un texto de resultado; no la ejecutes. Responde corto."
+                "un texto de resultado; no la ejecutes. "
+                "ADEMAS, al final de tu respuesta escribe una linea que empiece con 'PRUEBA:' "
+                "seguida de UNA sola linea de Python que llame a la funcion con datos de ejemplo y "
+                "compruebe el resultado con assert. Ejemplo: "
+                "PRUEBA: assert '19' in " + nombre_habilidad + "(100)   "
+                "Que sea una comprobacion REAL de que hace lo pedido, no 'assert True'. "
+                "Si la funcion no devuelve algo comprobable, escribe: PRUEBA: (ninguna). "
+                "Responde corto."
             )
-            subprocess.run(
+            salida_cc = subprocess.run(
                 [claude, "-p", prompt, "--permission-mode", "bypassPermissions"],
                 cwd=repo, capture_output=True, text=True, timeout=600,
                 encoding="utf-8", errors="replace",
             )
-            # Validar sintaxis ANTES de recargar (que un mal cambio no rompa a AIDEN).
-            with open(ruta_archivo, encoding="utf-8") as f:
-                codigo = f.read()
-            try:
-                compile(codigo, ruta_archivo, "exec")
-            except SyntaxError:
+            # La linea 'PRUEBA:' que Claude Code deja al final es la comprobacion de que la
+            # funcion HACE lo pedido, no solo de que compila.
+            prueba = ""
+            for linea in (salida_cc.stdout or "").splitlines():
+                if linea.strip().upper().startswith("PRUEBA:"):
+                    prueba = linea.split(":", 1)[1].strip()
+                    break
+            if prueba.lower().startswith("(ninguna"):
+                prueba = ""
+            # TRES puertas antes de recargar esto DENTRO del proceso de AIDEN: que compile,
+            # que el codigo no se salga de lo pedido, y que al ejecutarlo haga lo que dice.
+            # Antes solo estaba la primera, que no distingue "correcto" de "bien escrito".
+            from Nucleo_Slide.Validador_Habilidades import validar
+            ok, motivo = validar(ruta_archivo, nombre_habilidad, instruccion, prueba)
+            if not ok:
+                # El motivo CONCRETO, no un "no funciono": es lo que le permite a Marco decidir si
+                # lo pide de otra forma o lo mira el mismo.
                 hablado_del_asistente(
-                    "Senor, la habilidad " + nombre_habilidad + " quedo con un error de sintaxis; no la active."
+                    "Senor, no active la habilidad " + nombre_habilidad + ": " + motivo + "."
                 )
                 return
             importlib.reload(Auto_Programacion)
-            hablado_del_asistente("Senor, habilidad adquirida: " + nombre_habilidad + ".")
+            hablado_del_asistente("Senor, habilidad adquirida y probada: " + nombre_habilidad + ".")
         except subprocess.TimeoutExpired:
             hablado_del_asistente("Senor, programar " + nombre_habilidad + " tardo demasiado y lo detuve.")
         except Exception as e:
