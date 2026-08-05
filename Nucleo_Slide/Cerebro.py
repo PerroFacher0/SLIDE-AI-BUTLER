@@ -492,6 +492,26 @@ def _ejecutar_tool_call(nombre_funcion, argumentos):
         datos = {}
     if nombre_funcion not in tools_map:
         return f"La herramienta {nombre_funcion} no existe."
+
+    # ¿SIGUE SIENDO MARCO? Aquí, y no al transcribir, porque hasta este punto no se sabía QUÉ iba a
+    # hacer AIDEN. Solo se comprueba antes de las herramientas con poder real; para el resto esto
+    # es un lookup en un set y se sale. Si Marco no ha enrolado su voz, no bloquea nada.
+    try:
+        from Nucleo_Slide import Verificacion_Voz as _vv
+        _veredicto, _sim = _vv.verificar_para(nombre_funcion)
+        if _veredicto == "RECHAZO":
+            _vv.registrar_rechazo(nombre_funcion, _sim)
+            return ("BLOQUEADO: esa orden no la dio Marco (la voz no coincide). NO la ejecutes ni "
+                    "lo intentes por otro camino. Dile que no reconociste su voz.")
+        if _veredicto == "DUDA":
+            # Ni sí ni no: puede ser él afónico, o con ruido de fondo. En vez de decidir a ciegas,
+            # se le devuelve la pelota al modelo para que PREGUNTE — y la respuesta hablada vuelve
+            # a pasar por aquí, esta vez seguramente limpia.
+            return (f"SIN CONFIRMAR: no estoy seguro de que sea Marco (parecido {_sim:.0%}). "
+                    "No la ejecutes todavía: pídele que lo confirme diciéndolo otra vez.")
+    except Exception:
+        pass          # la seguridad no puede ser el motivo de que AIDEN deje de funcionar
+
     try:
         return _recortar_salida(str(tools_map[nombre_funcion](**datos)), nombre_funcion)
     except Exception as e:

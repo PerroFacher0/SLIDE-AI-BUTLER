@@ -187,3 +187,7 @@ pyserial
 # borrado REVERSIBLE: manda a la papelera en vez de destruir. Sin esto, gestionar_archivos
 # se niega a borrar en vez de hacerlo de forma definitiva.
 send2trash
+# verificacion de locutor (ECAPA-TDNN): confirma que la voz que da una orden PELIGROSA es la de
+# Marco. OPCIONAL: sin esto AIDEN funciona igual, solo que sin ese filtro. Hay que enrolar la voz
+# con Pruebas/enrolar_voz.py para que se active.
+speechbrain

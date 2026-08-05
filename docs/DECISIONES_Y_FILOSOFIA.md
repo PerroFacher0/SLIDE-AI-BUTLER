@@ -163,6 +163,51 @@
 
 ---
 
+## D20 — La voz se verifica solo cuando hay algo que perder
+
+**Qué:** `Nucleo_Slide/Verificacion_Voz.py`. Antes de ejecutar una herramienta con poder real
+(11 de 59), se comprueba que la voz que dio la orden es la de Marco (ECAPA-TDNN, local, en CPU).
+
+**El hueco que tapa:** el login es **facial y ocurre una sola vez**, al arrancar. A partir de ahí,
+cualquier voz que diga la palabra clave manda — y AIDEN escribe mensajes en nombre de Marco, ejecuta
+PowerShell arbitrario y puede auto-elevarse a administrador.
+
+**Tres decisiones, en orden de importancia:**
+
+1. **Proporcional, no universal.** Verificar *"sube el volumen"* añade latencia a cambio de nada: el
+   peor caso de que lo haga un impostor es que sube el volumen. El criterio de la lista es *¿el peor
+   caso es irreversible, o sale de este PC con el nombre de Marco?* Si no, no entra. Resultado:
+   11/59. Aplicarlo a todo habría sido más "seguro" en el papel y peor en la práctica — fricción en
+   lo trivial, y la costumbre de ignorar el aviso.
+
+2. **Se comprueba al EJECUTAR, no al transcribir.** Cuando Marco habla todavía no se sabe qué va a
+   hacer AIDEN; eso lo decide el modelo después. Poniéndolo en `_ejecutar_tool_call` —el punto único
+   por donde pasan las 59— la huella se calcula **solo si de verdad va a pasar algo serio**. En un
+   turno normal el coste medido es 0.00015 ms.
+
+3. **La duda no se resuelve adivinando.** Hay tres franjas, no dos: por encima de 0.70 pasa, por
+   debajo de 0.50 se rechaza y se avisa al celular, y **en medio se le devuelve la pelota al
+   modelo para que pregunte**. Marco afónico o con ruido de fondo cae ahí, y la respuesta hablada
+   vuelve a pasar por la misma puerta, esta vez limpia.
+
+**Nace apagada, y eso es parte del diseño.** Sin huella enrolada no bloquea absolutamente nada. No
+se puede enrolar sin la voz real de Marco, y **una autenticación que nadie ha probado es peor que
+ninguna**, porque se confía en ella. Los dos modos de fallo son malos: umbral alto y Marco se queda
+fuera de su propio asistente; umbral bajo y no filtra a nadie. Por eso `Pruebas/enrolar_voz.py` no
+solo guarda: **mide** cuánto se parece Marco a sí mismo entre frases distintas y dice si el umbral
+por defecto le sirve. Y es explícito sobre lo que *no* mide — que un impostor sea rechazado, para lo
+cual haría falta la voz de otra persona.
+
+**El audio caduca a los 60 s.** Sin eso, la última frase que dijo Marco seguiría validando órdenes
+una hora después, incluidas las que no salieron de su boca: la comprobación se volvería teatro.
+
+**Nunca es la causa de que AIDEN deje de funcionar:** si no hay audio (orden por texto o Telegram),
+si el audio es demasiado corto o si el verificador revienta, el resultado es `SIN_VERIFICAR` y la
+orden sigue. Convertir "no pude comprobarlo" en "rechazado" dejaría a Marco fuera por un fallo de
+micrófono.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],

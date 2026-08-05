@@ -27,3 +27,6 @@ notas.txt
 Vigilancia/
 Capturas/
 Imagenes/
+# Dato biometrico de Marco: su huella de voz. NO va a github.
+huella_marco.npy
+.modelos/

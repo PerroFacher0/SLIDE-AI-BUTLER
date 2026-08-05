@@ -219,6 +219,15 @@ def escuchador_de_usuario(timeout=15):
    with open(_RUTA_TEMP_WAV, "wb") as x:
      x.write(audio_capturar.get_wav_data())
 
+   # Se GUARDA el audio de esta orden, no se analiza: la huella de voz solo se calcula si el
+   # modelo acaba pidiendo una herramienta de riesgo, cosa que casi nunca pasa. Guardar es
+   # gratis; analizar cuesta, y no tiene sentido pagarlo por "sube el volumen".
+   try:
+       from Nucleo_Slide.Verificacion_Voz import recordar_audio
+       recordar_audio(audio_capturar.get_raw_data(convert_rate=16000, convert_width=2))
+   except Exception:
+       pass
+
    _t0 = time.perf_counter()
    # vad_filter: el Silero interno de faster-whisper descarta el audio SIN voz antes de
    # transcribir -> mata casi todas las alucinaciones de silencio.
