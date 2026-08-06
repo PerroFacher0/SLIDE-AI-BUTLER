@@ -48,6 +48,12 @@ from Funciones_Slide.Info.Bitacora import resumen_priorizado
 # El enrutador de peticiones (atajos + LLM + manos libres) vive en UN solo módulo compartido
 # con Main_AlwaysOn.py: cada arreglo aplica a los dos a la vez (antes estaba duplicado y divergía).
 from Nucleo_Slide.Peticiones import Procesar_Peticion, Voz
+from Nucleo_Slide.Freno_Duro import iniciar as iniciar_freno_duro
+
+# El freno duro arranca ANTES QUE NADA — antes de los hilos, del login facial y de Telegram. Es el
+# único módulo cuyo valor depende de estar disponible cuando lo demás falla: si se colgara el
+# arranque mismo, un vigía que arranca al final no serviría de nada.
+iniciar_freno_duro()
 iniciar_hilos()
 
 

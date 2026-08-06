@@ -53,6 +53,12 @@ TOOLS_DE_RIESGO = {
     "proyecto",
     "macro",                 # reproduce una secuencia de clics grabada
     "hardware",
+    # LA PUERTA DE ATRÁS: programar(hacer='whatsapp'|'llamar') manda un mensaje o hace una llamada
+    # en nombre de Marco, igual que enviar_mensaje — solo que más tarde. Verificar enviar_mensaje y
+    # dejar esta fuera era pedir la contraseña en la puerta y dejar la ventana abierta: bastaba con
+    # decir "programa un WhatsApp a X en un minuto". Se comprueba al PROGRAMARLA, que es cuando hay
+    # una voz que comprobar; cuando se dispara ya no hay nadie hablando.
+    "programar",
 }
 
 CADUCIDAD_AUDIO = 60      # s: pasado ese rato, el audio guardado ya no representa "quien manda ahora"

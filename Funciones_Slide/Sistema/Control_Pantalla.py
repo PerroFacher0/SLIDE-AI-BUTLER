@@ -191,7 +191,10 @@ def _consultar_vista(prompt, max_tokens=150):
     try:
         from openai import OpenAI
         from secretos import OPENROUTER_API_KEY
-        cliente = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+        # Con timeout: esto se llama en bucle dentro de _ajustar_visual, que es una operación
+        # cancelable. Sin él, Ctrl+Alt+P no puede llegar mientras se espera a la red.
+        cliente = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY,
+                         timeout=30.0, max_retries=1)
         r = cliente.chat.completions.create(
             model="google/gemini-2.5-flash",
             messages=[{"role": "user", "content": [
