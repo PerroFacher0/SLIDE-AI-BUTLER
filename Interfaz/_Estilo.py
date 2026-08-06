@@ -106,6 +106,57 @@ def borde_resplandor(painter, path, acento=ACENTO, intensidad=1.0):
         painter.drawPath(path)
 
 
+MS_MATERIALIZAR = 180       # ms de la entrada: se nota la intención, no la espera
+
+
+def materializar(painter, path, progreso):
+    """Entrada de un panel: el borde se TRAZA y solo al final se rellena.
+
+    En vez de aparecer entero de golpe, el contorno se dibuja como si se estuviera trazando —
+    primero un fragmento, después el perímetro completo, y ahí recién el fondo. Encaja con el resto
+    del lenguaje (un instrumento que se enciende, no una ventana que se abre).
+
+    Devuelve True si el panel ya está materializado, es decir, si quien llama debe seguir pintando
+    su contenido encima. Mientras se traza NO se dibuja contenido: texto a medio aparecer sobre un
+    panel translúcido se lee peor que nada.
+
+    El truco para no pagar nada: en vez de recorrer el perímetro con QPainterPathStroker (que
+    reconstruye la geometría en cada fotograma, ~25 veces por segundo, encima de todo lo que Marco
+    está haciendo), se recorta el área visible del MISMO path que ya se iba a dibujar. Cuesta un
+    setClipRect y se ve igual de trazado.
+
+    progreso >= 1 es el estado final: idéntico a como se veía antes de existir esta función."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPen
+    p = max(0.0, min(1.0, float(progreso)))
+    if p >= 1.0:
+        return True
+
+    r = path.boundingRect()
+    painter.save()
+    # El barrido va de izquierda a derecha, con un poco de holgura para que el trazo no nazca
+    # cortado justo en el borde del chaflán.
+    ancho = r.width() * (0.15 + 0.85 * p)
+    painter.setClipRect(r.x() - 2, r.y() - 2, ancho + 2, r.height() + 4)
+    painter.setBrush(Qt.NoBrush)
+    # El trazo parcial usa el resplandor de siempre, subiendo de intensidad: al principio es una
+    # insinuación, al final ya es el borde definitivo. Ningún color nuevo.
+    borde_resplandor(painter, path, intensidad=0.35 + 0.65 * p)
+    # Y la cabeza del trazo, la línea vertical que "va escribiendo" el contorno.
+    painter.setPen(QPen(color(ACENTO_BRILLO, int(150 * (1.0 - p * 0.6))), 1.4))
+    painter.drawLine(int(r.x() + ancho), int(r.y()), int(r.x() + ancho), int(r.y() + r.height()))
+    painter.restore()
+    return False
+
+
+def progreso_desde(inicio, ahora, ms=MS_MATERIALIZAR):
+    """0..1 según cuánto lleva vivo un elemento. Con inicio en 0 devuelve 1: lo que ya existía
+    antes de esta animación no se re-materializa."""
+    if not inicio:
+        return 1.0
+    return max(0.0, min(1.0, (ahora - inicio) * 1000.0 / max(1, ms)))
+
+
 def linea_escaneo(painter, rect, progreso):
     """Una línea fina que recorre el panel de arriba abajo, desvaneciéndose por los extremos.
 

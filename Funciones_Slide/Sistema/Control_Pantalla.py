@@ -20,10 +20,14 @@
 #      normalizadas (0-1000) del modelo se convierten contra ese origen, no contra (0,0).
 
 import re
+import threading
+import time
 
 import win32gui
 
 from Nucleo_Slide import Cancelacion
+
+_lock_indices = threading.RLock()   # la lista de la capa de rayos X la leen el LLM y el HUD
 
 
 # ── DPI: hay que declararlo ANTES de la primera captura o consulta de tamaño ──
@@ -134,6 +138,104 @@ def _ubicar_por_nombre(objetivo_n):
     except Exception:
         pass
     return None, None
+
+
+# ── CAPA DE RAYOS X: enumerar TODO lo clicable de la ventana en foco ─────────
+#
+# _ubicar_por_nombre recorre el árbol buscando UNO. Esto hace el mismo recorrido pero sin filtrar
+# por nombre: devuelve todos, numerados. Dos cosas que da y antes no había:
+#   — Marco puede decir "haz clic en el 4" en vez de describir el botón.
+#   — Y VE lo que AIDEN está interpretando de la pantalla, en vez de que actúe en secreto.
+_MAX_INDICES = 30        # más que esto satura la pantalla y el contexto del modelo
+_VIDA_INDICES = 20.0     # s: pasado ese rato la lista ya no representa lo que hay en pantalla
+
+_indices = {"lista": [], "en": 0.0}
+
+
+def _listar_clicables(tope=_MAX_INDICES):
+    """[(x, y, nombre, tipo)] de los elementos clicables de la ventana activa, en el orden en que
+    aparecen en el árbol. Sin nombre no se descarta: un botón de icono no tiene texto y sigue
+    siendo clicable — se le pone su tipo, que para elegir "el 4" da igual."""
+    if auto is None:
+        return []
+    _co_init()
+    fuera = []
+    try:
+        ventana = auto.GetForegroundControl()
+        if not ventana:
+            return []
+        vistos = set()
+        for ctrl, _d in auto.WalkControl(ventana, maxDepth=22):
+            if len(fuera) >= tope:
+                break
+            try:
+                if ctrl.ControlTypeName not in _CLICABLES:
+                    continue
+                r = ctrl.BoundingRectangle
+                if r.right - r.left < 4 or r.bottom - r.top < 4:
+                    continue                      # elementos de 0 px: existen en el árbol, no en pantalla
+                x = getattr(r, "xcenter", lambda: (r.left + r.right) // 2)()
+                y = getattr(r, "ycenter", lambda: (r.top + r.bottom) // 2)()
+                if (x, y) in vistos:              # contenedores que ocupan lo mismo que su hijo
+                    continue
+                vistos.add((x, y))
+                nombre = (ctrl.Name or "").strip()
+                fuera.append((x, y, nombre, ctrl.ControlTypeName))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return fuera
+
+
+def _mostrar_elementos():
+    elementos = _listar_clicables()
+    if not elementos:
+        return ("No encontré elementos enumerables en esta ventana, señor — algunas apps "
+                "(juegos, lienzos de dibujo) no exponen sus controles. Ahí sígame describiendo "
+                "qué quiere y lo busco viendo la pantalla.")
+    with _lock_indices:
+        _indices["lista"] = elementos
+        _indices["en"] = time.time()
+    try:
+        from Interfaz import Mira
+        Mira.mostrar_indices([(x, y) for x, y, _n, _t in elementos], _VIDA_INDICES)
+    except Exception:
+        pass
+    lineas = []
+    for i, (_x, _y, nombre, tipo) in enumerate(elementos, 1):
+        lineas.append(f"{i}. {nombre or '(' + tipo.replace('Control', '').lower() + ')'}")
+    return (f"{len(elementos)} elementos, señor. Dígame el número:\n" + "\n".join(lineas))
+
+
+def _olvidar_indices():
+    with _lock_indices:
+        _indices["lista"], _indices["en"] = [], 0.0
+    try:
+        from Interfaz import Mira
+        Mira.ocultar_indices()
+    except Exception:
+        pass
+
+
+def _por_indice(objetivo):
+    """Si Marco dijo un número y la lista sigue fresca, devuelve (x, y, nombre). Si no, None.
+
+    La lista CADUCA a propósito: los números se dibujaron sobre la pantalla de hace un rato, y si
+    la ventana cambió, "el 4" ya no es el mismo botón. Actuar sobre una lista vieja sería clicar a
+    ciegas con toda la confianza."""
+    txt = str(objetivo or "").strip().lstrip("#").rstrip(".")
+    if not txt.isdigit():
+        return None
+    with _lock_indices:
+        lista, en = list(_indices["lista"]), _indices["en"]
+    if not lista or (time.time() - en) > _VIDA_INDICES:
+        return None
+    n = int(txt)
+    if not (1 <= n <= len(lista)):
+        return None
+    x, y, nombre, tipo = lista[n - 1]
+    return x, y, (nombre or f"el {n}")
 
 
 # ── Localización por VISIÓN — respaldo universal (cuando no hay nombre) ──────
@@ -264,6 +366,13 @@ def _localizar_en_pantalla(descripcion):
 def _ubicar(objetivo):
     """Nombre primero (rápido); si no aparece, VISIÓN (cubre cualquier cosa visible).
     Devuelve (x, y, metodo, nombre_mostrado) o (None, None, None, None)."""
+    # ATAJO: si Marco dijo un número y acaba de ver los índices en pantalla, ya está resuelto —
+    # ni árbol de UI ni visión. Va primero porque es el único camino con coordenada exacta ya
+    # conocida; los otros dos hay que buscarlos.
+    directo = _por_indice(objetivo)
+    if directo:
+        return directo[0], directo[1], "indice", directo[2]
+
     objetivo_n = _norm(objetivo)
     xy, nombre = _ubicar_por_nombre(objetivo_n)
     if xy:
@@ -284,6 +393,9 @@ def _clic_en(objetivo, tipo="clic"):
     if x is None:
         return f"No encontré «{objetivo}» en pantalla, señor (ni por nombre ni viéndola)."
     try:
+        # Los índices se quitan ANTES del clic: en cuanto se pulsa algo la pantalla cambia, y unos
+        # números flotando sobre la interfaz nueva señalarían sitios que ya no son los de antes.
+        _olvidar_indices()
         _mira(x, y, nombre)                    # marca el blanco ANTES de moverse (se puede frenar)
         pyautogui.moveTo(x, y, duration=0.5)   # movimiento VISIBLE del cursor
         if tipo == "doble":
@@ -534,6 +646,117 @@ def _ordenar_ventanas():
     return f"Listo, señor. Ordené {min(n, len(celdas))} ventanas en mosaico."
 
 
+# ── COLOCAR EN UN MONITOR CONCRETO ───────────────────────────────────────────
+# _ordenar_ventanas ya arma el mosaico en el monitor donde Marco está. Esto es lo otro que hacía
+# falta: decir DÓNDE. "Pon el navegador en el 2" no se podía expresar.
+def _monitores():
+    """[(indice, (x, y, ancho, alto) del área útil)] en orden de izquierda a derecha, que es como
+    Marco los cuenta mirándolos — no en el orden arbitrario en que los enumera Windows."""
+    try:
+        import win32api
+        fuera = []
+        for h, _hdc, _r in win32api.EnumDisplayMonitors():
+            izq, arr, der, aba = win32api.GetMonitorInfo(h)["Work"]
+            fuera.append((izq, arr, der - izq, aba - arr))
+        fuera.sort(key=lambda a: a[0])
+        return list(enumerate(fuera, 1))
+    except Exception:
+        return []
+
+
+def _colocar(descripcion):
+    """'la ventana X en el monitor 2' / 'chrome en la pantalla 1' / 'en el monitor 2'."""
+    texto = str(descripcion or "").strip()
+    mons = _monitores()
+    if not mons:
+        return "No pude consultar los monitores, señor."
+
+    m = re.search(r"(?:monitor|pantalla|display)\s*(\d+)", texto, re.I)
+    if not m:
+        m = re.search(r"\b(\d+)\s*$", texto)
+    if not m:
+        return (f"¿En cuál monitor, señor? Tiene {len(mons)}: dígame «en el monitor 1» o "
+                "«en el monitor 2».")
+    n = int(m.group(1))
+    if not (1 <= n <= len(mons)):
+        # Decirlo claro y no fallar en silencio: con un solo monitor, "ponlo en el 2" es un error
+        # de Marco, no de AIDEN, y hay que devolvérselo entendible.
+        return (f"Solo tiene {len(mons)} monitor{'es' if len(mons) > 1 else ''}, señor; "
+                f"no existe el {n}.")
+    x0, y0, ancho, alto = mons[n - 1][1]
+
+    # A qué ventana: lo que quede del texto quitando la parte del monitor. Sin nombre, la activa.
+    resto = _norm(texto[:m.start()].replace("en el", " ").replace("en la", " "))
+    hwnd = None
+    if resto:
+        for h in _ventanas_ordenables():
+            try:
+                if resto in _norm(win32gui.GetWindowText(h)):
+                    hwnd = h
+                    break
+            except Exception:
+                continue
+        if hwnd is None:
+            return f"No encontré una ventana que se llame «{resto}», señor."
+    else:
+        hwnd = win32gui.GetForegroundWindow()
+    if not hwnd:
+        return "No hay ninguna ventana activa que mover, señor."
+
+    try:
+        titulo = win32gui.GetWindowText(hwnd) or "la ventana"
+        win32gui.ShowWindow(hwnd, 9)                                # SW_RESTORE
+        # Ocupa el monitor entero menos un margen: pegarla al borde exacto se ve peor y estorba
+        # con la barra de tareas si está en auto-ocultar.
+        win32gui.MoveWindow(hwnd, x0, y0, ancho, alto, True)
+        win32gui.SetForegroundWindow(hwnd)
+    except Exception as e:
+        return f"No pude mover la ventana, señor: {e}"
+    return f"Listo, señor: «{titulo[:40]}» al monitor {n}."
+
+
+# ── AISLAR: atenuar TODO menos una ventana ───────────────────────────────────
+def _aislar(objetivo=""):
+    """Oscurece el escritorio entero salvo la ventana indicada (o la activa)."""
+    objetivo_n = _norm(objetivo)
+    hwnd = None
+    if objetivo_n:
+        for h in _ventanas_ordenables():
+            try:
+                if objetivo_n in _norm(win32gui.GetWindowText(h)):
+                    hwnd = h
+                    break
+            except Exception:
+                continue
+        if hwnd is None:
+            return f"No encontré «{objetivo}», señor."
+    else:
+        hwnd = win32gui.GetForegroundWindow()
+    if not hwnd:
+        return "No hay ninguna ventana que aislar, señor."
+    try:
+        r = win32gui.GetWindowRect(hwnd)
+        titulo = win32gui.GetWindowText(hwnd) or "esta ventana"
+    except Exception as e:
+        return f"No pude leer la ventana, señor: {e}"
+    try:
+        from Interfaz import Mira
+        if not Mira.aislar(r):
+            return "No tengo la interfaz visual disponible para aislar, señor."
+    except Exception:
+        return "No tengo la interfaz visual disponible para aislar, señor."
+    return f"Listo, señor: solo «{titulo[:40]}». Diga «normal» cuando quiera el resto de vuelta."
+
+
+def _sin_aislar():
+    try:
+        from Interfaz import Mira
+        Mira.aislar(None)
+    except Exception:
+        pass
+    return "Vista completa de vuelta, señor."
+
+
 def _enfocar_app(objetivo):
     objetivo_n = _norm(objetivo)
     if not objetivo_n:
@@ -665,6 +888,9 @@ def _atajo(combo):
 
 
 def _despachar(a, objetivo):
+    # Va antes que "muestra"/"senal" porque _senalar también responde a "muestra" y se lo comería.
+    if "elemento" in a or "rayos" in a or "enumera" in a or "numera" in a:
+        return _mostrar_elementos()
     if "doble" in a:
         return _clic_en(objetivo, "doble")
     if "derech" in a or "secundario" in a or "right" in a:
@@ -679,6 +905,14 @@ def _despachar(a, objetivo):
         return _arrastrar(objetivo)
     if "clic" in a or "click" in a or "presion" in a or "pulsa el boton" in a:
         return _clic_en(objetivo, "clic")
+    # 'colocar' va ANTES que 'ordenar': "acomoda esto en el monitor 2" lleva las dos palabras, y
+    # la que manda es la que trae un destino concreto.
+    if "coloca" in a or "monitor" in a or "pantalla " in a or "mueve" in a or "pasa" in a:
+        return _colocar(objetivo)
+    if "aisla" in a or "aísla" in a or "solo esto" in a or "concentra" in a:
+        return _aislar(objetivo)
+    if a.startswith("normal") or "quita el aisl" in a or "vista completa" in a:
+        return _sin_aislar()
     if "orden" in a or "mosaico" in a or "acomod" in a:
         return _ordenar_ventanas()
     if "enfoc" in a or "frente" in a or "cambia a" in a:

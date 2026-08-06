@@ -303,6 +303,98 @@ solo era largo, cede y **AIDEN sigue vivo**. (2) Si no cede, mata el árbol de h
 
 ---
 
+## D24 — Marco ve lo que AIDEN interpreta (rayos X, ancla, aislar)
+
+Tres capacidades que comparten un principio: **si AIDEN va a actuar sobre la pantalla, Marco tiene
+que poder ver qué está entendiendo.**
+
+**Capa de rayos X** (`controlar_pantalla accion='mostrar_elementos'`). Enumera y numera todo lo
+clicable de la ventana activa. Reusa el recorrido de `_ubicar_por_nombre` sin filtrar por nombre. Da
+dos cosas: Marco dice *"el 4"* en vez de describir el botón, y **ve lo que AIDEN está
+interpretando** en vez de que actúe en secreto.
+
+- **El índice es un tercer camino, no un reemplazo.** En `_ubicar` va primero (es el único con
+  coordenada ya conocida), y detrás siguen intactos nombre y visión.
+- **La lista CADUCA a los 20 s y se borra al primer clic.** Los números se dibujaron sobre la
+  pantalla de hace un rato; si la ventana cambió, "el 4" ya no es el mismo botón. Actuar sobre una
+  lista vieja sería clicar a ciegas *con toda la confianza*, que es peor que no encontrar nada.
+- Los elementos sin nombre (iconos) entran igual: para elegir "el 4" el texto da lo mismo.
+
+**Ancla del navegador.** `navegar_web` ya se frenaba en pagos, CAPTCHA y 2FA — eso funcionaba. Lo
+que faltaba era que Marco supiera **cuál** de sus ventanas de Chrome es la de AIDEN. Se identifica
+por el **perfil** (`--user-data-dir`), no por "ser Chrome": marcar una ventana de Chrome cualquiera
+sería peor que no marcar nada, porque le señalaría la equivocada con total seguridad. Se pone donde
+se detecta (`estado_pagina`), un solo sitio, y se retira en un `finally`.
+
+**Aislar y colocar.** `colocar` mueve una ventana a un monitor concreto — `_ordenar_ventanas` ya
+sabía *cómo* pero no *dónde*. `aislar` oscurece todo menos una ventana: la Mira ya cubre todos los
+monitores y es click-through, así que sirve de velo sin ventana nueva. El agujero se hace
+**restando una región del clip**, no pintando un rectángulo "transparente" encima — eso taparía
+igual, solo que de otro color.
+
+**Sin herramienta nueva para "modos de trabajo".** Un protocolo personalizado ya encadena
+`colocar` + `Abrir_Apps` + `aislar`. Seguimos en 59 herramientas.
+
+---
+
+## D25 — La materialización: los paneles se trazan, no aparecen
+
+Los elementos del HUD aparecían de golpe. Ahora el contorno **se traza** y solo al final se rellena
+—unos 180 ms— coherente con D18: un instrumento que se enciende, no una ventana que se abre.
+
+**Tres decisiones que la hacen barata y no molesta:**
+
+1. **No se recorre el perímetro, se recorta el clip.** `QPainterPathStroker` reconstruiría la
+   geometría en cada fotograma, ~25 veces por segundo, encima de todo lo que Marco está haciendo.
+   Un `setClipRect` sobre el path que ya se iba a dibujar se ve igual de trazado y cuesta
+   **0,24 ms/cuadro** (medido; la referencia del resplandor era ~6,5 ms).
+2. **Mientras se traza NO se pinta contenido.** Texto a medio aparecer sobre un panel translúcido se
+   lee peor que nada.
+3. **El aspecto FINAL es idéntico** al de antes, verificado píxel a píxel. Solo cambia la entrada.
+
+**No se aplica a lo que debe ser instantáneo:** el flash de escaneo y la mira de clic. Esa última
+existe para dar tiempo a frenar con Ctrl+Alt+P — animarle la entrada iría **en contra de su
+propósito**. En el ancla de vigilancia la entrada no es el trazado de un panel (no es un panel):
+son los brazos creciendo desde la esquina, misma idea en su propia geometría, con el mismo reloj
+compartido.
+
+---
+
+## D26 — Poda de herramientas por turno: NO, y esta vez con números
+
+**Se pedía** filtrar el esquema de ~60 herramientas por turno, descrita como *"la optimización de
+mayor impacto que sigue sin tocarse"*. **Medida, es una pérdida neta.**
+
+| | tokens |
+|---|---|
+| Esquema completo (59 tools) | ~12.235 |
+| System prompt | ~3.435 |
+| Prefijo estable total | **~17.160** |
+| — del cual el esquema es | **71 %** |
+
+Y ahí está el problema, que es justo lo contrario de lo que sugiere ese 71 %: **el esquema no es un
+extra al final, es la mayor parte del prefijo cacheable.** En el cacheo implícito de Gemini basta
+que cambie un byte del prefijo para que se caiga *todo* lo que va detrás.
+
+- Podar la mitad ahorra **~6.117 tokens/ronda**.
+- Pero rompe el caché de los **17.160** enteros, que pasan a cobrarse completos.
+- Con el descuento típico del caché, podar sale **~2,6× más caro** que no podar.
+
+Esto no es una intuición nueva: el propio `Cerebro.py` ya lo dice donde vive la instrumentación
+(*"si el caché acierta, recortar el esquema por turnos sería CONTRAPRODUCENTE"*), y `_registrar_uso`
+existe precisamente para responderlo con datos.
+
+**El dato que falta, y quién puede sacarlo.** El porcentaje real de acierto del caché solo se mide
+en la máquina de Marco (aquí no hay `secretos.py`). Si su caché **no** estuviera acertando, la
+cuenta cambiaría y la poda pasaría a tener sentido. La instrumentación ya lo reporta por sesión.
+
+**Si algún día hiciera falta recortar tokens**, el camino que NO rompe el caché es acortar las
+descripciones del esquema (746 caracteres por herramienta de media) — una reducción **estable**, no
+una que cambia cada turno. Con la advertencia de que esas descripciones son justo lo que hace que
+el modelo elija bien, y este proyecto ya decidió pagar tokens por precisión.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],

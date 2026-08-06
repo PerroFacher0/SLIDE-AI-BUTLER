@@ -54,6 +54,7 @@ def mensaje(texto, segundos=5.0, titulo=""):
     with _lock:
         _mensajes.append({"texto": str(texto or "")[:900],
                           "titulo": str(titulo or "")[:60],
+                          "desde": time.time(),          # para la entrada trazada
                           "hasta": time.time() + segundos})
     return True
 
@@ -174,17 +175,75 @@ def _vigilar_saltos():
 # lo dicen sin ocupar sitio. Van MUY tenues a propósito: es un estado de fondo, no debe competir
 # con el panel que sí pide atención en ese momento.
 _vigiladas = {}          # hwnd -> (x1, y1, x2, y2)
+_vigila_desde = {}       # hwnd -> instante en que se fijó, para la entrada trazada
+_vigila_motivo = {}      # hwnd -> por qué está marcada (lo usa el ancla del navegador)
 _INTENSIDAD_VIGILA = 0.45
 
 
-def marcar_vigilancia(hwnd, activo=True):
+def marcar_vigilancia(hwnd, activo=True, motivo=""):
     if not _activa or not hwnd:
         return False
     with _lock:
         if not activo:
             _vigiladas.pop(hwnd, None)
+            _vigila_desde.pop(hwnd, None)
+            _vigila_motivo.pop(hwnd, None)
             return True
+        if hwnd not in _vigiladas:
+            _vigila_desde[hwnd] = time.time()     # solo al FIJARSE, no en cada refresco
         _vigiladas[hwnd] = None       # el rectángulo lo refresca el reloj, para que siga a la ventana
+        if motivo:
+            _vigila_motivo[hwnd] = str(motivo)[:80]
+    return True
+
+
+# ── AISLAR: oscurecer todo menos una ventana ─────────────────────────────────
+# La Mira ya cubre todos los monitores y es click-through, así que sirve de velo sin ventana nueva.
+# El agujero se hace con setClipRegion restando el rectángulo: pintar un rectángulo oscuro con un
+# "hueco transparente" encima no funcionaría — el hueco taparía igual, solo que con otro color.
+_aislado = {"rect": None, "desde": 0.0}
+_ALFA_VELO = 205         # bastante oscuro, pero no negro: se sigue intuyendo qué hay detrás
+
+
+def aislar(rect):
+    """rect = (x1, y1, x2, y2) en coordenadas de pantalla, o None para quitarlo."""
+    if not _activa:
+        return False
+    with _lock:
+        if rect is None:
+            _aislado["rect"], _aislado["desde"] = None, 0.0
+        else:
+            _aislado["rect"] = tuple(int(v) for v in rect)
+            _aislado["desde"] = time.time()
+    return True
+
+
+def esta_aislado():
+    return _aislado["rect"] is not None
+
+
+# ── CAPA DE RAYOS X: un número junto a cada elemento clicable ────────────────
+# Semitransparentes y pequeños, y desplazados arriba-izquierda del punto: si el número se dibujara
+# ENCIMA del elemento taparía justo lo que Marco está intentando elegir.
+_indices = {"puntos": [], "hasta": 0.0, "desde": 0.0}
+
+
+def mostrar_indices(puntos, segundos=20.0):
+    """puntos = [(x, y), ...] en coordenadas de pantalla. Se numeran desde 1, en ese orden."""
+    if not _activa or not puntos:
+        return False
+    with _lock:
+        _indices["puntos"] = [(int(x), int(y)) for x, y in puntos][:99]
+        _indices["hasta"] = time.time() + float(segundos)
+        _indices["desde"] = time.time()
+    return True
+
+
+def ocultar_indices():
+    if not _activa:
+        return False
+    with _lock:
+        _indices["puntos"], _indices["hasta"] = [], 0.0
     return True
 
 
@@ -262,26 +321,83 @@ def _construir():
                 marcas, cajas, carteles = list(_cola), list(_cajas), list(_mensajes)
                 pasos = list(_pasos["nombres"])
                 paso_actual, saltados = _pasos["actual"], set(_pasos["saltados"])
-                vigiladas = [r for r in _vigiladas.values() if r]
+                vigiladas = [(r, _vigila_desde.get(h, 0.0), _vigila_motivo.get(h, ""))
+                             for h, r in _vigiladas.items() if r]
                 flash_queda = max(0.0, _flash["hasta"] - ahora) / _flash["duracion"]
-            if not any((marcas, cajas, carteles, pasos, vigiladas, _estado_txt)) and flash_queda <= 0:
+                indices = list(_indices["puntos"]) if _indices["hasta"] > ahora else []
+                indices_desde = _indices["desde"]
+                velo, velo_desde = _aislado["rect"], _aislado["desde"]
+            if (not any((marcas, cajas, carteles, pasos, vigiladas, indices, velo, _estado_txt))
+                    and flash_queda <= 0):
                 return
             ox, oy = self._origen
             p = QPainter(self)
             p.setRenderHint(QPainter.Antialiasing, True)
 
+            # ── Velo de aislamiento: lo PRIMERO, para que todo lo demás quede por encima.
+            if velo:
+                from PySide6.QtGui import QRegion
+                x1, y1, x2, y2 = velo[0] - ox, velo[1] - oy, velo[2] - ox, velo[3] - oy
+                entra = min(1.0, max(0.0, (ahora - velo_desde) / 0.22))   # no aparece de golpe
+                p.save()
+                # La región es TODO menos la ventana: así el agujero es de verdad transparente y
+                # no un rectángulo de otro color encima.
+                p.setClipRegion(QRegion(self.rect()).subtracted(
+                    QRegion(x1, y1, max(1, x2 - x1), max(1, y2 - y1))))
+                p.setPen(Qt.NoPen)
+                p.setBrush(_E.color((10, 11, 13), int(_ALFA_VELO * entra)))
+                p.drawRect(self.rect())
+                p.restore()
+                # Un filo tenue en el borde del hueco: separa la ventana nítida del velo sin
+                # encerrarla en un marco.
+                p.setBrush(Qt.NoBrush)
+                p.setPen(QPen(_E.color(_E.ACENTO, int(70 * entra)), 1.2))
+                p.drawRect(x1, y1, max(1, x2 - x1), max(1, y2 - y1))
+
             # ── Escuadras de vigilancia: solo las 4 esquinas, no el rectángulo entero. Un marco
             # completo alrededor de una ventana que Marco está usando sería una jaula; cuatro
             # esquinas dicen lo mismo y dejan respirar lo de dentro.
-            for r in vigiladas:
+            for r, desde, motivo in vigiladas:
                 x1, y1, x2, y2 = r[0] - ox, r[1] - oy, r[2] - ox, r[3] - oy
-                brazo = max(10, min(26, (x2 - x1) // 12))
+                # Aquí la entrada no es el trazado de un panel —esto no es un panel— sino la misma
+                # idea en la geometría propia del ancla: los brazos CRECEN desde la esquina. Se usa
+                # el mismo reloj compartido para que ambas entradas duren lo mismo.
+                prog = _E.progreso_desde(desde, ahora)
+                brazo = int(max(10, min(26, (x2 - x1) // 12)) * prog)
+                if brazo < 1:
+                    continue
                 p.setBrush(Qt.NoBrush)
                 p.setPen(QPen(_E.color(_E.ACENTO, int(255 * _INTENSIDAD_VIGILA * 0.55)), 1.6))
                 for ex, ey, dx, dy in ((x1, y1, 1, 1), (x2, y1, -1, 1),
                                        (x1, y2, 1, -1), (x2, y2, -1, -1)):
                     p.drawLine(ex, ey, ex + brazo * dx, ey)
                     p.drawLine(ex, ey, ex, ey + brazo * dy)
+                # El motivo, pegado al ancla: si AIDEN se detuvo esperando algo, hay que poder leer
+                # POR QUÉ sin buscarlo en otra parte de la pantalla.
+                if motivo and prog >= 1.0:
+                    p.setFont(_E.fuente(9))
+                    p.setPen(_E.color(_E.TEXTO_TENUE, 210))
+                    p.drawText(x1 + 4, max(12, y1 - 6), motivo)
+
+            # ── Capa de rayos X: los números de los elementos clicables.
+            if indices:
+                prog = _E.progreso_desde(indices_desde, ahora)
+                p.setFont(_E.fuente(9, negrita=True))
+                for i, (px, py) in enumerate(indices, 1):
+                    txt = str(i)
+                    ancho = 15 if i < 10 else 22
+                    # Arriba-izquierda del punto: deja el elemento a la vista.
+                    rx, ry = px - ox - ancho - 3, py - oy - 17
+                    ruta = _E.panel_chamferado((rx, ry, ancho, 14), corte=4)
+                    if _E.materializar(p, ruta, prog):
+                        _E.rellenar_panel(p, ruta, (21, 22, 26, 205))
+                        _E.borde_resplandor(p, ruta, intensidad=0.5)
+                        p.setPen(_E.color(_E.TEXTO, 235))
+                        p.drawText(rx, ry, ancho, 14, Qt.AlignCenter, txt)
+                        # Una línea corta hasta el elemento: sin ella, con muchos números seguidos
+                        # no se sabe cuál es de cuál.
+                        p.setPen(QPen(_E.color(_E.ACENTO, 90), 1.0))
+                        p.drawLine(rx + ancho, ry + 12, px - ox - 1, py - oy - 1)
 
             # ── Flash de escaneo: un barrido que cruza TODOS los monitores de una pasada.
             if flash_queda > 0:
@@ -351,6 +467,12 @@ def _construir():
                 cx = (self.width() - ancho) // 2
 
                 ruta = _E.panel_chamferado((cx, arriba, ancho, alto))
+                # Se traza el contorno antes de rellenar. Mientras dura (180 ms) no se pinta el
+                # contenido: texto a medio aparecer sobre un panel translúcido se lee peor que
+                # nada. Al terminar queda EXACTAMENTE igual que antes de existir esta entrada.
+                if not _E.materializar(p, ruta, _E.progreso_desde(c.get("desde"), ahora)):
+                    arriba += alto + 10
+                    continue
                 _E.rellenar_panel(p, ruta)
                 _E.borde_resplandor(p, ruta)
                 # La línea de escaneo recorre el cartel mientras dura: un panel quieto parece una

@@ -75,9 +75,101 @@ def _asegurar_navegador():
         return _page
 
 
+# ── ANCLA VISUAL: ¿CUÁL ventana es, y por qué se detuvo? ─────────────────────
+#
+# El mini-agente YA se frena solo en pagos, retos de verificación y 2FA — eso funciona. Lo que
+# faltaba era puramente visual: Marco oye "me detuve, resuelva el CAPTCHA" y tiene que ADIVINAR
+# cuál de sus ventanas de Chrome es la de AIDEN. Esto le marca la correcta y le dice por qué.
+#
+# La ventana se identifica por el PERFIL, no por ser "una de Chrome": AIDEN arranca Chrome con
+# --user-data-dir=perfil_navegador_aiden, así que su proceso es distinguible del Chrome personal de
+# Marco aunque el ejecutable sea el mismo. Marcar "una ventana de Chrome cualquiera" sería peor que
+# no marcar nada: le señalaría la ventana equivocada con toda seguridad.
+_hwnd_marcado = None
+
+
+def _hwnd_del_navegador():
+    try:
+        import psutil
+        import win32gui
+        import win32process
+    except Exception:
+        return None
+    pids = set()
+    try:
+        for pr in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if "chrome" not in (pr.info.get("name") or "").lower():
+                    continue
+                cmd = " ".join(pr.info.get("cmdline") or [])
+                # El proceso NAVEGADOR es el que lleva el perfil y NO es un proceso hijo de
+                # renderizado (--type=renderer/gpu/utility): esos comparten el perfil y no tienen
+                # ventana propia.
+                if _PERFIL in cmd and "--type=" not in cmd:
+                    pids.add(pr.info["pid"])
+            except Exception:
+                continue
+    except Exception:
+        return None
+    if not pids:
+        return None
+
+    encontrado = []
+
+    def _mirar(hwnd, _extra):
+        try:
+            if not win32gui.IsWindowVisible(hwnd) or not win32gui.GetWindowText(hwnd):
+                return True
+            _hilo, pid = win32process.GetWindowThreadProcessId(hwnd)
+            if pid in pids:
+                encontrado.append(hwnd)
+        except Exception:
+            pass
+        return True
+
+    try:
+        win32gui.EnumWindows(_mirar, None)
+    except Exception:
+        return None
+    return encontrado[0] if encontrado else None
+
+
+def _marcar_ventana(motivo):
+    """Pone el ancla sobre la ventana de AIDEN y explica el motivo. Es un ADORNO: si el HUD no
+    está, la navegación sigue exactamente igual."""
+    global _hwnd_marcado
+    try:
+        from Interfaz import Mira
+        hwnd = _hwnd_del_navegador()
+        if not hwnd:
+            return False
+        if _hwnd_marcado and _hwnd_marcado != hwnd:
+            Mira.marcar_vigilancia(_hwnd_marcado, False)
+        _hwnd_marcado = hwnd
+        Mira.marcar_vigilancia(hwnd, True, motivo=motivo)
+        Mira.mensaje(motivo, 20.0, titulo="Navegador")
+        return True
+    except Exception:
+        return False
+
+
+def _desmarcar_ventana():
+    global _hwnd_marcado
+    if not _hwnd_marcado:
+        return False
+    try:
+        from Interfaz import Mira
+        Mira.marcar_vigilancia(_hwnd_marcado, False)
+    except Exception:
+        pass
+    _hwnd_marcado = None
+    return True
+
+
 def cerrar_navegador():
     """HERRAMIENTA: cierra el navegador de AIDEN (no toca tus otras ventanas de Chrome/Edge)."""
     global _pw, _contexto, _page
+    _desmarcar_ventana()
     with _lock:
         try:
             if _contexto:
@@ -274,9 +366,12 @@ def clic_en(descripcion):
     la página. Bloquea el clic si detecta que es un botón de PAGO/CONFIRMAR PEDIDO final."""
     page = _asegurar_navegador()
     if _es_boton_de_pago(descripcion) and estado_pagina().get("es_pago_final"):
+        _marcar_ventana("Pantalla de pago — diga «confirma el pago» para continuar")
         return ("Me detengo, señor: esto parece confirmar un PAGO o pedido final. No lo hago sin "
                 "que usted lo autorice explícitamente por voz. Dígame 'confirma el pago' si de "
                 "verdad quiere seguir.")
+    # Cualquier clic que SÍ se hace significa que lo de antes se resolvió: el ancla sobra.
+    _desmarcar_ventana()
     loc = _localizar_semantico(page, descripcion)
     if loc is not None:
         try:
@@ -479,9 +574,18 @@ def estado_pagina():
     except Exception:
         pass
     es_pago = bool(_PATRON_PAGO.search(texto)) and ("$" in texto or "total" in texto.lower())
+    reto = _hay_reto_seguridad(page)
+    # El ancla se pone AQUÍ, donde se detecta, y no en cada sitio que consulta el estado: así hay
+    # un solo lugar que decide "esto necesita a Marco" y no tres que puedan divergir.
+    if reto:
+        _marcar_ventana("Resuelva la verificación aquí — no puedo hacerlo por usted")
+    elif es_pago:
+        _marcar_ventana("Pantalla de pago — diga «confirma el pago» para continuar")
+    else:
+        _desmarcar_ventana()
     return {
         "cargando": cargando, "es_pago_final": es_pago,
-        "es_reto_seguridad": _hay_reto_seguridad(page), "titulo": _titulo_seguro(page),
+        "es_reto_seguridad": reto, "titulo": _titulo_seguro(page),
     }
 
 
@@ -633,7 +737,13 @@ def pedir_a_marco(pregunta):
     if not hay_celular():
         return ("No hay puente con el celular (falta configurar Telegram). Si Marco está frente al "
                 "PC, puede escribirlo él mismo en la ventana del navegador.")
-    r = preguntar(f"AIDEN necesita esto para seguir navegando:\n{pregunta}", timeout=180)
+    # Si Marco está DELANTE del PC, ve el ancla y sabe qué ventana espera qué; si no está, le llega
+    # igual por Telegram. Las dos vías, porque no se sabe dónde está.
+    _marcar_ventana("Le mandé la pregunta al celular; espero su respuesta")
+    try:
+        r = preguntar(f"AIDEN necesita esto para seguir navegando:\n{pregunta}", timeout=180)
+    finally:
+        _desmarcar_ventana()      # llegue o no la respuesta, el ancla no se queda colgada
     return f"Marco respondió: {r}" if r else "Marco no respondió a tiempo; no puedo continuar con eso."
 
 
