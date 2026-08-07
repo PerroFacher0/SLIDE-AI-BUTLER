@@ -724,6 +724,52 @@ Code, señor"* y no programa nada. El código está bien; lo que falta es el CLI
 
 ---
 
+## D35 — Mirar antes de preguntar (visión bajo demanda, no vigilancia)
+
+**Lo que ya existía:** el system prompt tenía una sección `PERCEPCIÓN DIRECTA` diciendo que *"esto",
+"eso", "ahí"* se resuelven mirando lo que AIDEN percibe, sin preguntar.
+
+**El hueco real, más estrecho de lo que parecía:** esa regla se apoya en los **demostrativos**. Y
+*"¿por qué no compila?"* **no lleva ninguno** — igual que *"arréglalo"*, *"termínalo"*, *"¿qué está
+mal?"*. Justo las frases más vagas eran las que se le escapaban, y ahí AIDEN podía contestar *"¿qué
+error?"* en vez de mirar.
+
+### La decisión que importa: avisar, no disparar
+
+El encargo ofrecía dos caminos — solo la instrucción, o un atajo determinista que **ejecutara**
+`analizar`. Se eligió un tercero, y por un motivo concreto: **qué cuesta equivocarse.**
+
+- Ejecutar `analizar` en falso = una **captura de la pantalla de Marco** y una llamada a Gemini
+  Vision que él no pidió. Dinero, un par de segundos, y una foto por una corazonada.
+- **Avisar al modelo** en falso = una frase que ignora.
+
+Misma detección determinista, sin nada que perder cuando falla. Y encaja con el marco del encargo
+(nada de vigilancia): **el módulo detecta, no ejecuta** — verificado con AST, no buscando texto,
+porque `analizar(` sí aparece en el archivo… dentro del aviso que se le manda al modelo.
+
+### La heurística, medida antes de confiar en ella
+
+Contra un corpus de 18 frases que sí hablan de la pantalla y 28 que no —incluidas trampas como
+*"cierra eso"*, *"guarda esto en mis notas"*, *"cuánto he gastado este mes"*—:
+
+**18/18 detectadas, 0 falsos positivos en 28.** Coste: **5 µs**.
+
+Tres reglas la sostienen, y las tres salieron de un falso positivo real:
+- **Si el verbo ya tiene su herramienta, no es una pregunta visual.** *"cierra eso"* es
+  `control_ventana`, no visión.
+- **Demostrativo + palabra de tiempo no señala nada.** *"este mes"* era el único falso positivo de
+  la primera versión.
+- **Más de 6 palabras y la frase ya dice de qué habla.**
+
+### Lo que no se tocó
+
+`analizar` y `explicar_error` siguen igual; lo que cambia es **cuándo** usarlas, y ahora el prompt
+las separa explícitamente: **en pantalla → `analizar`; copiado → `explicar_error`**. Sin
+herramienta nueva (siguen 59), sin hilos de fondo, sin nada que corra antes de que Marco hable. El
+aviso va en la parte **volátil** del prompt, así que no toca el prefijo cacheado (D26).
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],

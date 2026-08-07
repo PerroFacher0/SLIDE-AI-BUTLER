@@ -8,6 +8,7 @@
 # Barato a propósito: solo win32gui/pyperclip/psutil locales (cero LLM, cero red) y con caché de
 # unos segundos para no enumerar ventanas en cada frase.
 
+import re
 import threading
 import time
 
@@ -81,6 +82,55 @@ def clip_completo(limite=1500):
         return ""
 
 
+# ── ¿ESTÁ HABLANDO DE LO QUE TIENE DELANTE? ──────────────────────────────────
+#
+# "¿por qué no compila?" no lleva ningún "esto" ni "eso" — no hay pronombre que agarrar — y aun así
+# se refiere clarísimamente a lo que Marco tiene en pantalla. La regla que ya existía en el system
+# prompt se apoyaba en los demostrativos, así que esta clase de frase se le escapaba y AIDEN podía
+# contestar "¿qué error?" en vez de mirar.
+#
+# Lo que se hace con la detección importa tanto como la detección. Se puede EJECUTAR `analizar`
+# sola, o AVISAR al modelo de que probablemente toque mirar. Se eligió avisar, y no por timidez:
+# ejecutarla equivocándose cuesta una captura de pantalla y una llamada a Vision que Marco no pidió
+# — dinero, un par de segundos, y una foto de su pantalla por una corazonada. Avisando, un fallo
+# cuesta una frase que el modelo ignora. Misma detección, sin nada que perder cuando se equivoca.
+_DEMOSTRATIVOS = ("esto", "eso", "esta", "este", "aqui", "aquí", "ahi", "ahí", "asi", "así")
+# "arréglalo", "termínalo", "explícamelo": el pronombre va PEGADO al verbo y no hay objeto.
+_CLITICOS = re.compile(r"\b\w{3,}(lo|la|melo|mela)\b")
+# Hablar del ESTADO de algo que solo se puede ver: no hace falta demostrativo.
+_ESTADO_VISIBLE = ("compila", "falla", "error", "esta mal", "está mal", "esta bien", "está bien",
+                   "no funciona", "no anda", "no sirve", "se rompio", "se rompió")
+# Si el verbo YA tiene su herramienta, el demostrativo no significa "mira": "cierra eso" es
+# control_ventana, no visión.
+_CON_TOOL_PROPIA = ("cierra", "cerra", "sube", "baja", "quita", "pon ", "abre", "guarda", "manda",
+                    "envia", "envía", "copia", "apaga", "reinicia", "silencia", "borra", "mueve",
+                    "busca", "reproduce", "programa")
+# "este mes", "esta semana": el demostrativo va con tiempo, no señala la pantalla.
+_TIEMPO = ("mes", "ano", "año", "semana", "dia", "día", "rato", "momento", "vez", "tarde",
+           "manana", "mañana", "noche", "hora")
+_MAX_PALABRAS = 6      # más que esto y la frase ya dice de qué habla
+
+
+def apunta_a_la_pantalla(consulta=""):
+    """True si la frase se refiere a algo VISIBLE sin decir qué es."""
+    t = " " + str(consulta or "").lower().strip() + " "
+    if any(v in t for v in _CON_TOOL_PROPIA):
+        return False
+    if len(t.split()) > _MAX_PALABRAS:
+        return False
+    for d in _DEMOSTRATIVOS:
+        i = t.find(f" {d} ")
+        if i < 0:
+            continue
+        siguiente = t[i + len(d) + 2:].split()
+        if siguiente and siguiente[0] in _TIEMPO:
+            continue
+        return True
+    if _CLITICOS.search(t):
+        return True
+    return any(e in t for e in _ESTADO_VISIBLE)
+
+
 def contexto_del_turno(consulta=""):
     """Lo que conviene añadir al prompt SABIENDO ya lo que pidió Marco.
 
@@ -90,14 +140,24 @@ def contexto_del_turno(consulta=""):
     y vuelta con el modelo. Adelantarlo cuando su frase apunta al portapapeles se ahorra el viaje
     completo, que es de segundos, no de milisegundos."""
     t = str(consulta or "").lower()
-    if not any(p in t for p in _APUNTA_AL_CLIP):
-        return ""
-    clip = clip_completo()
-    # Si cabe en el resumen de siempre, ya está ahí: repetirlo sería gastar tokens por nada.
-    if len(clip) <= 100:
-        return ""
-    return ("PORTAPAPELES COMPLETO (Marco parece estar hablando de esto; ya lo tienes, NO llames a "
-            "leer_portapapeles):\n" + clip)
+    trozos = []
+
+    # 1) ¿Habla de lo que TIENE DELANTE sin decir qué es? Se le avisa; mirar lo decide él.
+    if apunta_a_la_pantalla(consulta):
+        trozos.append(
+            "AVISO: la frase de Marco no dice a QUÉ se refiere, y lo normal es que sea algo que "
+            "tiene EN PANTALLA. Tu primera acción debe ser analizar(fuente='pantalla') para verlo "
+            "— no le preguntes a qué se refiere. Si al mirarlo resulta que no era eso, sigue con "
+            "lo que sí encaje."
+        )
+
+    # 2) ¿Habla de lo que tiene COPIADO? (el resumen de siempre solo lleva 100 caracteres)
+    if any(p in t for p in _APUNTA_AL_CLIP):
+        clip = clip_completo()
+        if len(clip) > 100:
+            trozos.append("PORTAPAPELES COMPLETO (Marco parece estar hablando de esto; ya lo "
+                          "tienes, NO llames a leer_portapapeles):\n" + clip)
+    return "\n\n".join(trozos)
 
 
 def percepcion_compacta():
