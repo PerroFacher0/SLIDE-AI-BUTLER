@@ -151,6 +151,72 @@ def llamada_whatsapp(nombre_contacto):
         return (f"Abrí el chat de {res['nombre_real']}, señor, pero no pude iniciar la llamada. "
                 "Pulse usted el botón de llamar.")
     return f"Llamando a {res['nombre_real']}, señor"
+# ── ¿DÓNDE ESTÁ CLAUDE CODE? ─────────────────────────────────────────────────
+#
+# Antes se miraba en el PATH y en ~/.local/bin/claude.exe. En esta PC no hay ninguno de los dos, y
+# la habilidad de auto-programarse llevaba muerta sin que nadie lo notara: devolvía "no lo
+# encuentro" y ahí acababa.
+#
+# El motivo es que Claude Code se puede tener de tres formas y solo una deja el comando en el PATH:
+# el instalador nativo, npm global, y la EXTENSIÓN DE VS CODE — que trae su propio binario dentro y
+# no instala nada fuera. Marco lo tiene de la tercera.
+#
+# La ruta de la extensión lleva el NÚMERO DE VERSIÓN dentro
+# (…/anthropic.claude-code-2.1.223-win32-x64/…), así que clavarla la rompería en la siguiente
+# actualización. Se busca por patrón y se coge la versión más alta — que es lo que este proyecto ya
+# aprendió con AIDEN.bat, donde una ruta escrita a mano llevaba meses apuntando a otra PC.
+_CARPETAS_VSCODE = (".vscode", ".vscode-insiders", ".vscode-server", ".cursor", ".windsurf")
+# Tope al rastreo. Lo señaló el auditor de resiliencia: esto lo dispara Marco POR VOZ, y recorrer
+# una carpeta del disco es leer algo de fuera. En una instalación normal hay una o dos versiones;
+# el tope solo existe para que una carpeta de extensiones absurda no deje el turno de voz mirando
+# archivos. Con más de esto, algo raro pasa y da igual cuál se elija.
+_MAX_CANDIDATOS = 40
+
+
+def _version_de(carpeta):
+    """(2, 1, 223) a partir de 'anthropic.claude-code-2.1.223-win32-x64'. Ordenar por texto pondría
+    la 2.1.9 por encima de la 2.1.223."""
+    import re
+    m = re.search(r"claude-code-(\d+(?:\.\d+)*)", os.path.basename(carpeta))
+    if not m:
+        return (0,)
+    return tuple(int(x) for x in m.group(1).split("."))
+
+
+def _buscar_claude():
+    """La ruta del CLI, o None. Se prueban las tres formas de tenerlo instalado.
+
+    Los imports van dentro, como en el resto del archivo: `shutil` se importa dentro de
+    Auto_Modificacion, así que a nivel de módulo no existe."""
+    import glob
+    import shutil
+
+    en_path = shutil.which("claude")
+    if en_path:
+        return en_path
+
+    nativo = os.path.join(os.path.expanduser("~"), ".local", "bin", "claude.exe")
+    if os.path.exists(nativo):
+        return nativo
+
+    casa = os.path.expanduser("~")
+    candidatos = []
+    for carpeta in _CARPETAS_VSCODE:
+        patron = os.path.join(casa, carpeta, "extensions", "anthropic.claude-code-*",
+                              "resources", "native-binary", "claude*")
+        for ruta in glob.glob(patron)[:_MAX_CANDIDATOS]:
+            if os.path.isfile(ruta) and os.access(ruta, os.X_OK):
+                candidatos.append(ruta)
+        if len(candidatos) >= _MAX_CANDIDATOS:
+            break
+    if not candidatos:
+        return None
+    # La más nueva: por versión, y si empatan, la instalada más tarde.
+    candidatos.sort(key=lambda r: (_version_de(os.path.dirname(os.path.dirname(os.path.dirname(r)))),
+                                   os.path.getmtime(r)))
+    return candidatos[-1]
+
+
 def Auto_Modificacion(nombre_habilidad, instruccion):
     # Hace que AIDEN APRENDA una habilidad nueva para SI MISMO usando Claude Code: le pide
     # escribir la funcion en Nucleo_Slide/Auto_Programacion.py y la recarga en vivo. Corre en
@@ -165,11 +231,10 @@ def Auto_Modificacion(nombre_habilidad, instruccion):
     if not nombre_habilidad or not instruccion:
         return "Necesito el nombre de la habilidad y que debe hacer, senor."
 
-    claude = shutil.which("claude") or os.path.join(
-        os.path.expanduser("~"), ".local", "bin", "claude.exe"
-    )
-    if not claude or not os.path.exists(claude):
-        return "No encuentro Claude Code, senor; no puedo programar la habilidad."
+    claude = _buscar_claude()
+    if not claude:
+        return ("No encuentro Claude Code, senor; no puedo programar la habilidad. "
+                "Se instala con: npm install -g @anthropic-ai/claude-code")
 
     ruta_archivo = os.path.abspath(Auto_Programacion.__file__)
     repo = os.path.dirname(os.path.dirname(ruta_archivo))   # raiz del repo
