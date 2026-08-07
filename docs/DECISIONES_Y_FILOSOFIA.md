@@ -645,6 +645,85 @@ que ninguna herramienta con efectos puede entrar. `Especulacion.estadisticas()` 
 
 ---
 
+## D33 — Fase 2 (transcripción parcial): NO, y los números lo cierran por dos lados
+
+El encargo pedía medir antes de comprometerse, y decía explícitamente que *"no vale la pena"* era
+una respuesta válida. **Lo es.** Se midió con audio real (frases de AIDEN sintetizadas con Kokoro,
+transcritas con el mismo Whisper `small` del Transcriptor) y sale que no por dos caminos
+independientes.
+
+**No se pudo medir el coste en GPU**: este PC tiene torch **sin CUDA** (`2.11.0+cpu`), así que
+Kokoro y Whisper solo corren en CPU. Pero eso no bloquea la decisión, porque **la estabilidad de
+una parcial no depende del dispositivo** — es una propiedad del modelo y del audio. Y la
+estabilidad es lo que decide.
+
+### Lado 1: las parciales no son estables
+
+| frase | duración | pasadas | Whisper rehizo | adelanto útil |
+|---|---|---|---|---|
+| buscar | 5,2 s | 5 | 1 | ninguno |
+| clima | 3,4 s | 3 | 1 | +2,4 s |
+| cerrar | 2,9 s | 2 | 1 | ninguno |
+| mensaje | 3,8 s | 3 | 1 | ninguno |
+
+**31 % de las pasadas rehicieron lo ya dicho.** Y el primer segundo es basura en los cuatro casos
+— la palabra clave sale como *"Hayden"*, *"Ayden"*, *"Hay de encierra"*. La señal aparece hacia los
+2-3 s, que en una frase de 3 s **es prácticamente el final**. Solo 1 de 4 frases produjo una
+corazonada antes de terminar.
+
+### Lado 2: aunque fueran estables, no habría nada que ganar
+
+Este es el argumento que cierra el asunto, y salió de medir las herramientas especulables:
+
+| herramienta | tarda |
+|---|---|
+| calculadora | 0,2 ms |
+| ver_apps_abiertas | 63 ms |
+| leer_portapapeles | 285 ms |
+| estado_sistema | 671 ms |
+
+**Todas caben de sobra dentro de una llamada al modelo**, que son segundos. La Fase 1 ya las lanza
+al empezar el turno y ya terminan antes de que el modelo las pida — está medido: cobrar un
+resultado especulado cuesta **3,5 ms**. Lanzarlas 2 segundos antes no las hace terminar más pronto
+de lo que ya terminan.
+
+**Dicho de otro modo: la Fase 2 solo ayudaría con herramientas más lentas que la llamada al
+modelo — y ésas son justamente las que están excluidas de la lista** (`buscar` quedó fuera por
+gastar cuota de API en una corazonada). El hueco que la Fase 2 viene a tapar no existe.
+
+**No implementada. La Fase 1 se queda como está.**
+
+---
+
+## D34 — Conectar el cerebro de AIDEN a Claude: qué se puede y qué no
+
+Dos cosas distintas que es fácil confundir:
+
+**La API de Anthropic (`api.anthropic.com`) se paga con créditos de API**, y una suscripción de
+claude.ai no da acceso a ella. Son dos productos con facturación separada: el login OAuth del
+cliente (`ant auth login`) resuelve contra una **organización del Developer Platform**, no contra
+la suscripción personal. Así que *"usar mi suscripción en vez de comprar créditos"* no es una
+opción por esa vía.
+
+**Pero AIDEN ya habla con Claude, y por la vía que sí funciona.** `Auto_Modificacion` ejecuta
+`claude -p` — Claude Code en modo headless, autenticado con la sesión de Claude Code. Ese puente ya
+existe y ya se usa para escribir habilidades nuevas.
+
+**Por qué eso no lo convierte en el cerebro.** Tres razones medidas o estructurales:
+- El cerebro necesita **function calling** con las 59 herramientas. `claude -p` devuelve texto, no
+  llamadas estructuradas — habría que parsearlas a mano y perder el mecanismo que hace que AIDEN
+  acierte de herramienta.
+- La latencia de arrancar el CLI y su bucle de agente es de segundos; el turno de voz vive de
+  responder en ~1 s.
+- Rompería el caché implícito (D26), que hoy es lo que hace barato el prefijo de 17 k tokens.
+
+**Hallazgo colateral: `Auto_Modificacion` no funciona en esta PC.** Busca `claude` en el PATH y
+luego en `~/.local/bin/claude.exe`; aquí no existe ninguno de los dos (Claude Code corre como
+extensión de VS Code y no deja un CLI en el PATH). La herramienta devuelve *"No encuentro Claude
+Code, señor"* y no programa nada. El código está bien; lo que falta es el CLI instalado.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],
