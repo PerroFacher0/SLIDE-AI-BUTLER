@@ -42,6 +42,7 @@ def _fecha_hora_actual():
 # él pidió de lo que AIDEN decidió solo. Import de módulo (no de nombres sueltos) porque el hilo-
 # local vive dentro y hay que leerlo actualizado, no una copia del momento del import.
 from Nucleo_Slide import Estado_Del_Mundo as _EdM
+from Nucleo_Slide import Especulacion as _Esp
 
 # OpenRouter — la key vive en secretos.py (fuera de git)
 from secretos import OPENROUTER_API_KEY
@@ -355,10 +356,15 @@ def _instrucciones_completas(consulta=""):
     # PERCEPCIÓN DIRECTA: lo que HAY en el PC de Marco en este instante (ventana activa, apps,
     # portapapeles, energía). Con esto "cierra eso" / "¿qué opinas de esto?" se entienden SOLOS.
     try:
-        from Nucleo_Slide.Percepcion import percepcion_compacta
+        from Nucleo_Slide.Percepcion import percepcion_compacta, contexto_del_turno
         percep = percepcion_compacta()
         if percep:
             base += "\n\nLO QUE VES EN SU PC AHORA MISMO (tu percepción directa):\n" + percep
+        # Y lo que solo se sabe que hace falta DESPUÉS de oírle: si preguntó por lo que tiene
+        # copiado, va entero aquí y se ahorra la ronda de leer_portapapeles.
+        extra = contexto_del_turno(consulta)
+        if extra:
+            base += "\n\n" + extra
     except Exception:
         pass
     # CONCIENCIA COMPARTIDA: qué está pasando AHORA en el PC (lo que vieron los vigilantes/la
@@ -574,7 +580,16 @@ def _ejecutar_tool_call(nombre_funcion, argumentos):
         pass          # la seguridad no puede ser el motivo de que AIDEN deje de funcionar
 
     try:
-        salida = _recortar_salida(str(tools_map[nombre_funcion](**datos)), nombre_funcion)
+        # ¿Estaba ya adelantada? Se espera un poco a la que sigue corriendo: si el modelo pidió
+        # justo lo que se estaba especulando, esperar 300 ms a que acabe sale mejor que empezarla
+        # otra vez desde cero. Si no había nada, `cobrar` devuelve None y se ejecuta como siempre.
+        #
+        # Lo único que cambia es DE DÓNDE sale el texto. El recorte y el marcado de contenido
+        # externo siguen ocurriendo en UN solo sitio, por debajo de los dos caminos: si cada rama
+        # tuviera su propio return, mañana alguien añade una tercera y se olvida de marcar.
+        _ya = _Esp.cobrar(nombre_funcion, datos, espera=0.3)
+        bruto = _ya if _ya is not None else str(tools_map[nombre_funcion](**datos))
+        salida = _recortar_salida(bruto, nombre_funcion)
         return _marcar_si_externo(salida, nombre_funcion)
     except Exception as e:
         return f"Error ejecutando {nombre_funcion}: {e}"
@@ -782,6 +797,14 @@ def proceso_de_ia(texto_de_whisper):
         if hablado_del_asistente(t):
             ultima_interrumpida = True
 
+    # ESPECULACIÓN: sus palabras ya dicen bastante antes de que el modelo decida nada. Si pide el
+    # clima, va a hacer falta el clima. Se arranca AHORA, en paralelo con la llamada al modelo, que
+    # es lo lento del turno. Si el modelo pide otra cosa, esto se tira sin que se note.
+    try:
+        _Esp.desde_lo_que_dijo(texto_de_whisper)
+    except Exception:
+        pass
+
     instrucciones = _instrucciones_completas(texto_de_whisper)
     memoria.append({'role': 'user', 'content': texto_de_whisper})
 
@@ -910,6 +933,13 @@ def proceso_de_ia(texto_de_whisper):
                 if _es_error_tool(resultado):
                     hubo_error_tool = True
                 memoria.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': resultado})
+            # Con lo que acaba de correr ya se puede adelantar lo que suele venir detrás, mientras
+            # el modelo lee estos resultados y decide la ronda siguiente.
+            try:
+                _Esp.desde_la_ronda_anterior([t['function']['name'] for t in tool_calls_list],
+                                             texto_de_whisper)
+            except Exception:
+                pass
             # SELF-HEALING: si una herramienta falló, PRIMERO Flash ve el error en la siguiente
             # ronda y se corrige solo (otros argumentos, otra herramienta, o lo explica) — como
             # Jarvis: diagnostica antes de rendirse. Solo si falla DOS rondas seguidas (atascado
@@ -967,6 +997,13 @@ def proceso_de_ia(texto_de_whisper):
             memoria.append({'role': 'assistant', 'content': texto_final})
 
     memoria = _recortar_memoria(memoria)
+
+    # Se acabó el turno: lo que se adelantó y no hizo falta se tira aquí. No se registra, no se
+    # cuenta y no se menciona — para todo lo demás es como si nunca hubiera corrido.
+    try:
+        _Esp.olvidar()
+    except Exception:
+        pass
 
     # Guarda este intercambio en la memoria episódica (para recordarlo en el futuro)
     # y persiste la conversación (si AIDEN se reinicia, retoma el hilo).

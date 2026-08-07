@@ -578,6 +578,73 @@ sería inventarse historia justo en el registro que existe para poder confiar.
 
 ---
 
+## D32 — Ejecución especulativa, Fase 1
+
+Empezar a resolver antes de que haga falta: mientras el modelo piensa —lo más lento del turno— la
+PC no hace nada, aunque muchas veces ya se puede adivinar qué va a pedir.
+
+### 1A: la premisa medida resultó falsa, y el arreglo estaba en otro sitio
+
+El encargo decía que hay 1-3 s entre la palabra clave y el fin de la captura que «hoy no se
+aprovecha para nada», y proponía precargar ahí la ventana activa y el portapapeles.
+
+**Ya estaba resuelto**: `Percepcion.py` mete esos datos en **todos** los prompts desde hace tiempo.
+Y reunirlos cuesta **1,73 ms** (medido, mediana de 10). Precargarlos durante la captura ahorraría
+eso — de un turno que dura segundos. No hay nada que ganar por ahí.
+
+**Pero al medirlo apareció el hueco de verdad, y es 1000× mayor.** La percepción recorta el
+portapapeles a **100 caracteres**, con razón: va en todos los turnos y casi ninguno trata de eso.
+El problema es que cuando Marco dice *"traduce esto"*, esos 100 caracteres no le bastan al modelo,
+que entonces llama a `leer_portapapeles`... y eso es **una ronda entera de ida y vuelta con el
+modelo**, del orden de segundos.
+
+Ahora, cuando su frase apunta al portapapeles, va **entero** en el prompt y se le dice que no pida
+la herramienta. Se ahorra el viaje completo. **El objetivo era 1,73 ms; el premio estaba en otro
+sitio.**
+
+### 1B: especular herramientas, con una regla que manda sobre todo
+
+Se lanzan lecturas **antes** de que el modelo las pida: al empezar el turno según las palabras de
+Marco, y entre rondas según lo que acaba de correr. Si acierta, el paso sale gratis (**3,5 ms en
+vez de 600**, medido). Si falla, se tira: **1 ms**, sin evento, sin rastro.
+
+**Por qué NO se reusó `_TOOLS_PARALELAS`.** Era la candidata obvia — ya existe y ya dice «estas se
+pueden correr a la vez». Pero **paralelizable no es lo mismo que sin efectos**, y comprobarlo una
+por una lo demostró: **`notas` está en esa lista y con `accion='guardar'` escribe una nota.**
+Especularla habría creado notas que Marco nunca pidió. Reusar una lista por parecerse habría sido
+el error de D22 con otro disfraz.
+
+**La lista de especulables (11) se verifica con AST, no de palabra.** La prueba lee el código de
+cada una y busca escrituras de archivo, de registro, de base de datos o envíos de red. Si mañana
+alguien mete una escritura en una de ellas, **falla sin que nadie tenga que acordarse de revisar**.
+Hubo que afinar el detector para no confundir `"x".replace()` con `os.replace()`: a fuerza de
+falsos positivos, un control de seguridad deja de mirarse. Y hay **una sola excepción, anclada al
+comando exacto**: `estado_sistema` lanza `nvidia-smi --query-gpu=…`, que es un proceso pero solo
+consulta; si alguien cambia ese comando, la prueba salta.
+
+**Trampa del nombre:** hay **dos** funciones `recordar`. `Memoria.recordar` **escribe** en la
+memoria permanente; `Memoria_RAG.recordar` busca. La herramienta es la segunda (comprobado en
+`tools_map`), pero el nombre invita a equivocarse justo del lado peligroso.
+
+**Un `return` en vez de dos.** La primera versión tenía una salida propia para el camino
+especulado, con su recorte y su marcado de contenido externo. La suite lo cazó: dos sitios que
+deben acordarse de marcar. Ahora la especulación solo cambia **de dónde sale el texto**; el recorte
+y el marcado siguen ocurriendo una sola vez, por debajo de los dos caminos.
+
+**Y la especulación nunca se salta un control:** la verificación de voz sigue ejecutándose antes
+que el cobro.
+
+### Lo que falta medir, y solo se puede en la máquina de Marco
+
+La **tasa de acierto real** y la mejora de latencia extremo a extremo necesitan la API (aquí no hay
+`secretos.py`). Lo verificado es el mecanismo: que acertar sale gratis, que fallar no cuesta nada y
+que ninguna herramienta con efectos puede entrar. `Especulacion.estadisticas()` reporta
+`lanzadas / aciertos / fallos / tasa` para que ese dato salga de su uso real.
+
+**Fase 2 (predicción sobre transcripción parcial) no se ha empezado**, como pedía el encargo.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],

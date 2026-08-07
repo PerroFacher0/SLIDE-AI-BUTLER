@@ -66,6 +66,40 @@ def _energia():
     return ""
 
 
+# Lo que Marco dice cuando lo que le importa es lo que tiene copiado.
+_APUNTA_AL_CLIP = ("esto", "eso", "lo que copie", "lo que copié", "portapapeles", "copiado",
+                   "traduce", "traduc", "resume esto", "que significa", "qué significa",
+                   "explicame esto", "explícame esto", "corrige")
+
+
+def clip_completo(limite=1500):
+    """El portapapeles ENTERO, no los 100 caracteres del resumen."""
+    try:
+        import pyperclip
+        return (pyperclip.paste() or "").strip()[:limite]
+    except Exception:
+        return ""
+
+
+def contexto_del_turno(consulta=""):
+    """Lo que conviene añadir al prompt SABIENDO ya lo que pidió Marco.
+
+    La percepción normal recorta el portapapeles a 100 caracteres — bien, porque va en TODOS los
+    turnos y casi ninguno trata de eso. Pero cuando Marco dice "traduce esto", esos 100 caracteres
+    no le alcanzan al modelo, así que pide `leer_portapapeles`... y eso es una ronda entera de ida
+    y vuelta con el modelo. Adelantarlo cuando su frase apunta al portapapeles se ahorra el viaje
+    completo, que es de segundos, no de milisegundos."""
+    t = str(consulta or "").lower()
+    if not any(p in t for p in _APUNTA_AL_CLIP):
+        return ""
+    clip = clip_completo()
+    # Si cabe en el resumen de siempre, ya está ahí: repetirlo sería gastar tokens por nada.
+    if len(clip) <= 100:
+        return ""
+    return ("PORTAPAPELES COMPLETO (Marco parece estar hablando de esto; ya lo tienes, NO llames a "
+            "leer_portapapeles):\n" + clip)
+
+
 def percepcion_compacta():
     """La vista de AIDEN sobre el PC AHORA, compacta para el prompt (con caché de unos segundos)."""
     ahora = time.time()
