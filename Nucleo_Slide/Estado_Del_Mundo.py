@@ -62,21 +62,77 @@ def actualizar(**campos):
         _guardar()
 
 
+# ── ¿ESTO LO PIDIÓ MARCO, O LO DECIDIÓ AIDEN? ────────────────────────────────
+#
+# `origen` dice de QUÉ MÓDULO salió el evento, no por qué. Y no sirve para separar las dos cosas:
+# "control_total" aparece igual cuando Marco dice "cierra Chrome" que cuando la conciencia ambiental
+# decide ejecutar algo sola — es literalmente la misma línea de código. Lo mismo con "protocolos",
+# "navegador_web" o "redactor".
+#
+# La tentación es etiquetar los ~35 sitios que registran eventos. Sería la segunda lista del mismo
+# concepto, y este proyecto ya sabe cómo acaba eso (_PROHIBIDAS).
+#
+# Lo que sí es un solo sitio: el TURNO de Marco. O AIDEN está atendiendo algo que él pidió, o no lo
+# está. Se marca ese turno en un hilo-local y todo lo que se registre dentro hereda la respuesta,
+# por hondo que esté. Fuera del turno —los hilos de fondo, sin excepción— es decisión propia.
+#
+# El defecto es "por mi cuenta" A PROPÓSITO: si mañana aparece un vigía nuevo y nadie se acuerda de
+# marcarlo, sus eventos salen en la bitácora de autonomía. Equivocarse hacia "te lo cuento" es el
+# lado correcto en el que fallar cuando lo que está en juego es la confianza.
+_hilo = threading.local()
+
+
+def atendiendo_a_marco():
+    return bool(getattr(_hilo, "atendiendo", False))
+
+
+def fijar_atendiendo(valor):
+    """Devuelve el valor anterior, para poder restaurarlo (turnos anidados)."""
+    previo = atendiendo_a_marco()
+    _hilo.atendiendo = bool(valor)
+    return previo
+
+
+class turno_de_marco:
+    """with turno_de_marco(): ...  — todo lo de dentro es «Marco lo pidió»."""
+
+    def __enter__(self):
+        self._previo = fijar_atendiendo(True)
+        return self
+
+    def __exit__(self, *exc):
+        fijar_atendiendo(self._previo)
+        return False
+
+
 def registrar_evento(texto, origen="sistema"):
     # Añade al HILO de conciencia lo que acaba de pasar (lo ve toda la mente).
     texto = str(texto or "").strip()
     if not texto:
         return
+    solo = not atendiendo_a_marco()
     with _lock:
         ev = _estado.get("eventos", [])
         if ev and ev[-1].get("texto") == texto:   # dedup consecutivo
             return
         ev.append({
             "t": time.time(), "hora": datetime.now().strftime("%H:%M"),
-            "texto": texto[:200], "origen": origen,
+            "texto": texto[:200], "origen": origen, "solo": solo,
         })
         _estado["eventos"] = ev[-MAX_EVENTOS:]
         _guardar()
+
+
+def eventos_autonomos(horas=16, maximo=12):
+    """Lo que AIDEN hizo POR SU CUENTA. Los eventos de antes de este cambio no traen la marca:
+    se omiten en vez de adivinarles una, que sería inventarse historia."""
+    corte = time.time() - max(1, float(horas)) * 3600
+    fuera = []
+    with _lock:
+        for e in _estado.get("eventos", []):
+            if e.get("solo") is True and e.get("t", 0) >= corte:
+                fuera.append(e)
+    return fuera[-maximo:]
 
 
 def marcar_interaccion():

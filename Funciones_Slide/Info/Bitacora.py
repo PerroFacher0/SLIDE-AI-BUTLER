@@ -112,11 +112,32 @@ def resumen_priorizado(horas=16):
         return f"Mientras no estaba llegaron {len(vistos)} notificaciones, señor."
 
 
-def resumen_actividad(horas=16):
+def _bitacora_autonomia(horas):
+    """Lo que AIDEN hizo POR SU CUENTA. Deliberadamente aparte de las notificaciones de Windows:
+    mezclarlas sería ruido, y sobre todo perdería lo único que hace útil esta lista — que Marco
+    pueda revisar qué decidió el agente sin que él se lo pidiera. Eso no es un dato más del PC."""
+    try:
+        from Nucleo_Slide.Estado_Del_Mundo import eventos_autonomos
+        eventos = eventos_autonomos(horas)
+    except Exception:
+        return "No pude leer mi propia bitácora, señor."
+    if not eventos:
+        return (f"Nada por mi cuenta en las últimas {int(horas)} horas, señor. "
+                "Todo lo que hice, me lo pidió usted.")
+    lineas = [f"- [{e.get('hora', '')}] {e.get('texto', '')}" for e in eventos]
+    return ("Lo que hice por mi cuenta, señor:\n" + "\n".join(lineas))
+
+
+def resumen_actividad(horas=16, que="notificaciones"):
     try:
         horas = int(horas)
     except (ValueError, TypeError):
         horas = 16
+    # "¿qué hiciste tú por tu cuenta?" es otra pregunta que "¿qué pasó en el PC?", pero no merece
+    # una herramienta propia: mismo verbo, mismo periodo, misma intención de ponerse al día. Una
+    # tool más costaría precisión en las otras 58 (la regla anti-bloat del proyecto).
+    if str(que or "").strip().lower().startswith(("auto", "tuy", "propi", "solo", "mio", "mío")):
+        return _bitacora_autonomia(horas)
     eventos = _leer_notificaciones(horas)
     if eventos is None:
         return "No pude acceder al registro de notificaciones de Windows, señor."

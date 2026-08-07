@@ -134,6 +134,14 @@ def Salir(demora=3.0):
          sys.stdout.flush()
       except Exception:
          pass
+      # Le deja dicho al supervisor que ESTO FUE A PROPÓSITO. Sin la marca no hay forma de
+      # distinguirlo de una caída: el código de salida es 0 en los dos casos si Qt cerró bien, y
+      # relanzar a alguien que acaba de pedir salir sería lo más molesto que podría hacer AIDEN.
+      try:
+         from Nucleo_Slide.Supervisor import marcar_salida_limpia
+         marcar_salida_limpia()
+      except Exception:
+         pass
       os._exit(0)
 
    threading.Thread(target=_apagar, daemon=True).start()

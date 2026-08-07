@@ -285,11 +285,12 @@ tools = [
         "type": "function",
         "function": {
             "name": "resumen_actividad",
-            "description": "Resume lo que pasó en el PC mientras Marco no estaba: las notificaciones que llegaron (mensajes de WhatsApp/Discord, correos, alertas). Úsala cuando Marco pregunte qué pasó anoche, qué se perdió, o pida el resumen de notificaciones. Al darle el resultado, RESALTA lo relevante (mensajes, correos) y omite el ruido (actualizaciones, promos).",
+            "description": "Dos preguntas parecidas, un solo sitio. que='notificaciones' (por defecto): lo que pasó en el PC mientras Marco no estaba — mensajes de WhatsApp/Discord, correos, alertas; al darle el resultado RESALTA lo relevante y omite el ruido (actualizaciones, promos). que='autonomo': lo que TÚ hiciste POR TU CUENTA, sin que él lo pidiera — avisos proactivos, recados que entregaste, archivos que ordenaste solo, habilidades que te programaste. Usa 'autonomo' cuando pregunte '¿qué has hecho por tu cuenta?', '¿qué decidiste sin preguntarme?', '¿qué hiciste mientras no estaba?' referido a TI y no al PC.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "horas": {"type": "number", "description": "Cuántas horas hacia atrás revisar (por defecto 16). Opcional."}
+                    "horas": {"type": "number", "description": "Cuántas horas hacia atrás revisar (por defecto 16). Opcional."},
+                    "que": {"type": "string", "description": "'notificaciones' (por defecto) = lo que pasó en el PC. 'autonomo' = lo que AIDEN decidió y ejecutó por su cuenta."}
                 },
                 "required": []
             }

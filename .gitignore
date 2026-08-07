@@ -33,3 +33,7 @@ huella_marco.npy
 
 # Pruebas guardadas de las habilidades que AIDEN se escribio (para reprobarlas en reposo).
 habilidades_probadas.json
+
+# El pulso del supervisor y la marca de cierre a proposito: estado local, no codigo.
+heartbeat.txt
+.salida_limpia

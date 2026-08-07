@@ -38,6 +38,11 @@ def _fecha_hora_actual():
     return f"{_DIAS_ES[n.weekday()]} {n.day} de {_MESES_ES[n.month - 1]} de {n.year}, {n.strftime('%H:%M')}"
 
 
+# Quién está pidiendo las cosas: se marca el turno de Marco para poder distinguir después lo que
+# él pidió de lo que AIDEN decidió solo. Import de módulo (no de nombres sueltos) porque el hilo-
+# local vive dentro y hay que leerlo actualizado, no una copia del momento del import.
+from Nucleo_Slide import Estado_Del_Mundo as _EdM
+
 # OpenRouter — la key vive en secretos.py (fuera de git)
 from secretos import OPENROUTER_API_KEY
 # timeout EXPLÍCITO. El del SDK son 600 s de lectura con 2 reintentos: media hora larga colgado
@@ -502,7 +507,12 @@ def _ejecutar_tanda(tool_calls_list):
     if total > 1:
         _hud("actualizar_pasos", [tc['function']['name'] for tc in tool_calls_list], 0)
 
+    _atendiendo = _EdM.atendiendo_a_marco()
+
     def _correr(par):
+        # ThreadPoolExecutor estrena hilos, y un hilo-local nace vacio en cada uno. Sin esto, una
+        # tanda paralela de lo que Marco acaba de pedir se registraria como decision propia.
+        _EdM.fijar_atendiendo(_atendiendo)
         i, tc = par
         _hud("marcar_paso", i)
         # Marco puede saltarse UN paso concreto (Ctrl+Alt+1..9) sin abortar el turno entero, que es
@@ -759,6 +769,10 @@ def proceso_de_ia(texto_de_whisper):
     # Aqui es donde el cerebro entiende que tiene que hacer (con voz + barge-in).
     global memoria, ultima_interrumpida
     ultima_interrumpida = False
+    # TODO lo que se registre de aqui para adentro es «Marco lo pidio», por hondo que este. Es el
+    # unico sitio donde hay que decirlo: el resto de AIDEN — los vigias, la conciencia ambiental,
+    # los recados — corre fuera de este turno y por tanto es decision propia.
+    _EdM.fijar_atendiendo(True)
 
     # Habla una frase; si AIDEN fue interrumpido, deja de hablar el resto.
     def decir(t):
@@ -984,6 +998,8 @@ _memoria_remota = []
 
 
 def procesar_remoto(texto):
+    # Telegram tambien es Marco pidiendo: su chat esta bloqueado a el.
+    _EdM.fijar_atendiendo(True)
     global _memoria_remota
     with _lock_remoto:
         instrucciones = _instrucciones_completas(str(texto))

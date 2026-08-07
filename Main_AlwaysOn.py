@@ -224,5 +224,27 @@ try:
 except Exception as _e:
     print(f"[terminal] omitida: {_e}")
 
+# PULSO: un timestamp en un archivo, cada 30 s, desde el HILO DE QT. Ahí está la gracia — no vale
+# escribirlo desde un hilo de fondo, porque entonces seguiría latiendo con la interfaz congelada,
+# que es justo el caso que hay que detectar. Si el bucle de Qt se atasca, el pulso se para solo.
+try:
+    from PySide6.QtCore import QTimer as _QTimer
+    import os as _os
+    _RUTA_PULSO = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "heartbeat.txt")
+
+    def _latir():
+        try:
+            with open(_RUTA_PULSO, "w") as _f:
+                _f.write(str(time.time()))
+        except Exception:
+            pass
+
+    _pulso = _QTimer()
+    _pulso.timeout.connect(_latir)
+    _pulso.start(30000)
+    _latir()                      # el primero, ya: el supervisor no tiene que esperar 30 s
+except Exception as _e:
+    print(f"[pulso] omitido: {_e}")
+
 # Qt corre para siempre aquí (esto es lo "always-on"); se sale solo con "Salir" del tray.
 sys.exit(app.exec())

@@ -509,6 +509,75 @@ que te escribiste ya no hace lo que decía" no lo es, y eso sí va a `Estado_Del
 
 ---
 
+## D30 — El supervisor: lo congelado importa más que lo muerto
+
+`Main_AlwaysOn` corre con `app.exec()` para siempre y nadie lo mira. Si se cae, o si se **congela**,
+Marco se entera cuando le habla y AIDEN no contesta.
+
+**Un proceso Qt de larga duración se cuelga más veces de las que crashea limpio**, y colgado es
+*peor*: el proceso existe, el candado del puerto 50607 sigue tomado, el icono está en la bandeja...
+y no responde. Un supervisor que solo mirara si el proceso vive daría luz verde para siempre.
+
+**Por eso el pulso lo escribe el hilo de Qt, no un hilo de fondo.** Si el bucle de eventos se
+atasca, el pulso se para **solo**. Un latido escrito desde un hilo aparte seguiría llegando con la
+interfaz muerta — y eso sería *peor que no tenerlo*, porque daría confianza.
+
+**Los dos fallos que el supervisor no puede cometer:**
+
+1. **Relanzar algo que Marco cerró.** Es lo más molesto que podría hacer. El código de salida no
+   sirve para distinguirlo (vale 0 en los dos casos), así que `Salir()` deja una **marca en disco**
+   antes de morir, y el supervisor la consume al leerla.
+2. **Un bucle de reinicios.** Si AIDEN se cae al arrancar, reintentar para siempre son cien
+   procesos por minuto. **Tres caídas en menos de un minuto y se detiene**, avisando por Telegram y
+   por un cuadro de Windows. Caídas *espaciadas* no cuentan: mala racha no es lo mismo que algo
+   roto.
+
+**Dos detalles que salieron de pensar en el arranque real:** hay **120 s de gracia** antes de
+exigir pulso, porque cargar Whisper y Kokoro lleva su tiempo y sin eso el supervisor mataría a
+AIDEN en cada arranque, para siempre. Y se espera a **tres latidos perdidos**, no a uno, para que
+un pico de carga no cuente como cuelgue.
+
+**Hallazgo colateral: el lanzador estaba roto.** `AIDEN.bat` y `AIDEN_oculto.vbs` tenían clavada
+`c:\Users\Usuario\Desktop\Python Proyecto\SLIDE-AI-BUTLER` y el entorno `Asistente_Slide_311` —
+rutas de la **otra PC**, que aquí no existen. Nadie lo había notado porque AIDEN se arranca desde
+VS Code. Ahora los dos deducen su carpeta de dónde están, y el supervisor lanza AIDEN con
+`sys.executable`, heredando el entorno virtual sin que nadie escriba su ruta en ningún sitio.
+
+---
+
+## D31 — «¿Qué hiciste por tu cuenta?»
+
+**Lo que se encontró antes de diseñar nada** (el paso 0 era parte del encargo): `origen` tiene 20
+valores en uso y todos son **nombres de módulo**, no intenciones. No sirve para separar las dos
+cosas: `"control_total"` aparece igual cuando Marco dice *"cierra Chrome"* que cuando la conciencia
+ambiental decide ejecutar algo sola — **es literalmente la misma línea de código**. Igual con
+`"protocolos"`, `"navegador_web"` o `"redactor"`.
+
+**La tentación era etiquetar los ~35 sitios que registran eventos.** Sería la segunda lista del
+mismo concepto, y este proyecto ya sabe cómo acaba eso (D22, `_PROHIBIDAS`).
+
+**Lo que sí es un solo sitio: el turno de Marco.** O AIDEN está atendiendo algo que él pidió, o no.
+Se marca ese turno en un hilo-local y **todo lo que se registre dentro hereda la respuesta**, por
+hondo que esté. Fuera del turno —los vigías, la conciencia, los recados— es decisión propia. Dos
+líneas en `Cerebro` (voz y Telegram) cubren los 35 sitios, y `origen` no se toca.
+
+**El defecto es «por mi cuenta», a propósito.** Si mañana aparece un vigía nuevo y nadie se acuerda
+de marcarlo, sus eventos salen en la bitácora. Equivocarse hacia *"te lo cuento"* es el lado
+correcto en el que fallar cuando lo que está en juego es la confianza.
+
+**El detalle que casi se escapa:** `_ejecutar_tanda` reparte herramientas en un `ThreadPoolExecutor`,
+y **un hilo nuevo no hereda un hilo-local**. Sin traspasarlo, *"cierra Chrome"* dentro de una tanda
+paralela habría salido marcado como decisión propia de AIDEN — justo la mentira que esta bitácora
+no se puede permitir. Verificado con un hilo real.
+
+**Sin herramienta nueva.** `resumen_actividad(que='autonomo')` — misma intención de ponerse al día,
+mismo periodo; una tool más costaría precisión en las otras 58. Seguimos en 59.
+
+**Los eventos anteriores a este cambio no traen marca y se omiten**, en vez de adivinarles una: eso
+sería inventarse historia justo en el registro que existe para poder confiar.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],
