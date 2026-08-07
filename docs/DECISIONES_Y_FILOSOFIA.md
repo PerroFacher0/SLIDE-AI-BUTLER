@@ -440,6 +440,75 @@ Seguimos en 59 herramientas.
 
 ---
 
+## D28 — El audio se agacha solo mientras AIDEN habla
+
+Con música puesta, la voz de AIDEN competía con Spotify y el micrófono captaba las dos cosas. La
+única salida era que Marco bajara el volumen a mano antes de hablarle — justo la clase de gesto que
+un mayordomo debería ahorrarte.
+
+**No se reusa `perifericos(accion="volumen_app")` aunque haga algo parecido**: esa busca UNA app
+**por su nombre** y devuelve una frase para decir en voz alta. Aquí hacen falta las tres cosas que
+no da: recorrer todas las sesiones, **guardar el nivel exacto** de cada una y devolverlas ahí. Lo
+que sí se reusa es el mecanismo — pycaw, `GetAllSessions`, `ISimpleAudioVolume`.
+
+**Cuatro cosas que había que hacer bien, y una es un bug que arruinaría la música:**
+
+1. **No agacharse a sí mismo.** Kokoro suena por el mismo proceso de Python: agachar "todo lo que
+   suena" incluiría la voz de AIDEN y el efecto sería el contrario del buscado. Se filtra por PID.
+2. **Porcentaje, no valor fijo.** Bajar todo a un 20 % absoluto le *subiría* el volumen a algo que
+   Marco tenía al 5 %. Se baja al 20 % de lo que cada una tenía.
+3. **No guardar dos veces el "original".** AIDEN habla (agacha) y además escucha (agacha otra vez).
+   Sin protección, la segunda bajada guardaría el nivel **ya agachado** como si fuera el original y
+   la música se quedaría baja **para siempre**. El nivel se guarda solo en la primera bajada.
+4. **Una sola vez por turno.** El ducking envuelve el turno entero de habla, no el bucle de frases:
+   agachar y restaurar entre frase y frase haría **parpadear** el volumen durante una respuesta
+   larga. Verificado: 5 frases = exactamente 2 escrituras de volumen.
+
+**Se respeta lo que Marco ya decidió:** una app que él silenció, o que ya está casi muda, no se
+toca. Y en **modo gaming** no se agacha nada — ahí el juego manda sobre la claridad de la voz,
+mismo criterio anti-molestia que el resto de las pausas del modo.
+
+**El `finally` es obligatorio** (por eso es un context manager): si AIDEN revienta a media frase y
+no restaura, Marco se queda con la música al 20 % sin saber por qué.
+
+---
+
+## D29 — Mantenimiento cuando Marco no está
+
+Todo lo que corre de fondo va por reloj: cada 20 minutos, cada 25 segundos. Ninguno mira si Marco
+está delante. Eso está bien para lo que tiene que ocurrir sí o sí, y mal para el trabajo que
+conviene pero no urge: acaba haciéndose justo cuando él usa la PC, o no haciéndose nunca.
+
+**El disparador nuevo no es otro reloj: es su ausencia** (`GetLastInputInfo`, 15 min, sin gaming y
+sin una operación en curso). Los timers existentes no se tocaron.
+
+**Ninguna tarea es inventada. Las tres ya deberían pasar y no tenían momento:**
+
+1. **Purgar la memoria visual.** `Memoria_Visual` borra lo más viejo de 24 h en cada ronda... pero
+   solo mientras está **activa**, y nace apagada. Si Marco la enciende un rato y la apaga, lo que
+   grabó se queda en el disco **para siempre**. La purga existía; le faltaba correr también cuando
+   nadie mira.
+2. **Reprobar las habilidades auto-programadas.** Su prueba de comportamiento (D19) se ejecutaba una
+   vez, el día que nacieron, y **se tiraba** — una habilidad quedaba validada para siempre por una
+   comprobación de hace tres meses. Ahora la prueba **se guarda** (eso hubo que añadirlo; sin
+   persistirla no había nada que volver a correr) y aquí se repite.
+3. **Barrer los temporales propios**: los guiones del validador que quedan huérfanos si el proceso
+   muere entre escribirlos y borrarlos.
+
+**La regla que manda sobre todas: en cuanto Marco toca el ratón, esto desaparece.** No al final de
+la tarea en curso — en el siguiente punto de control, que se consulta **entre tarea y tarea**, no
+solo al empezar. Un mantenimiento que le roba CPU justo cuando vuelve es peor que no hacerlo,
+porque lo que él nota es que su PC va lenta al sentarse.
+
+**Nada queda a medias si se corta:** la purga es un `DELETE` transaccional (SQLite deshace la
+transacción entera), el barrido borra de archivo en archivo y la reprueba corre en otro proceso.
+Las tareas van de barata a cara, para que un corte temprano cueste lo menos posible.
+
+**Solo se avisa de lo que le cambia algo a Marco.** "Borré 3 temporales" es ruido; "la habilidad
+que te escribiste ya no hace lo que decía" no lo es, y eso sí va a `Estado_Del_Mundo`.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],

@@ -244,7 +244,12 @@ def hablado_del_asistente(texto_final):
     if not frases:
         return False
 
-    with _lock_audio:
+    # El ducking va AQUÍ, envolviendo el turno entero, y no dentro del bucle de frases: agachar y
+    # restaurar en cada frase haría parpadear el volumen de la música durante una respuesta larga.
+    # Una sola bajada al empezar a hablar, una sola subida al terminar — la interrupción incluida,
+    # porque el `with` sale igual por barge-in que por final normal.
+    from Voz_Slide import Ducking
+    with _lock_audio, Ducking.mientras(Ducking.FACTOR_HABLA):
         barge = _voz_callback is not None
         evento_interrumpir = threading.Event()
         parar_listener     = threading.Event()

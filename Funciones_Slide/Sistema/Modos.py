@@ -13,6 +13,8 @@ from Funciones_Slide.Sistema.Vigilante_Eventos import pausar_vigilante_eventos
 from Nucleo_Slide.Memoria_Visual import pausar_memoria_visual
 from Voz_Slide.Transcriptor import descargar_modelo_voz, recargar_modelo_voz
 from Voz_Slide.Herramientas_del_asistente import descargar_kokoro, recargar_kokoro, _lock_audio
+from Voz_Slide.Ducking import pausar_ducking
+from Nucleo_Slide.Reposo import pausar_reposo
 
 
 def _notificaciones_windows(activadas):
@@ -68,6 +70,10 @@ def modo_gaming(activar):
     pausar_conciencia(encender)             # gaming ON  -> conciencia ambiental en pausa
     pausar_vigilante_eventos(encender)      # gaming ON  -> avisos de USB/descargas en pausa
     pausar_memoria_visual(encender)         # gaming ON  -> deja de mirar la pantalla
+    # gaming ON -> NO agacha el juego para hablar. Aquí el audio del juego importa más que la
+    # claridad de la voz de AIDEN: mismo criterio anti-molestia que el resto de las pausas.
+    pausar_ducking(encender)
+    pausar_reposo(encender)                 # gaming ON  -> nada de mantenimiento robando CPU/GPU
     try:                                    # avisa a la conciencia compartida el modo actual
         from Nucleo_Slide.Estado_Del_Mundo import actualizar, registrar_evento
         actualizar(modo="gaming" if encender else "normal")

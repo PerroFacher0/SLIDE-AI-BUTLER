@@ -30,3 +30,6 @@ Imagenes/
 # Dato biometrico de Marco: su huella de voz. NO va a github.
 huella_marco.npy
 .modelos/
+
+# Pruebas guardadas de las habilidades que AIDEN se escribio (para reprobarlas en reposo).
+habilidades_probadas.json

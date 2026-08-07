@@ -195,7 +195,12 @@ def escuchador_de_usuario(timeout=15):
  global _calibrado
  try:
 
-  with sr.Microphone(device_index=microfono_encontrado) as source:
+  # Mientras ESCUCHA se agacha menos que mientras habla: si Marco solo suelta una palabra y sigue
+  # oyendo la canción, matarle la música del todo sería peor que el problema. Lo justo para que el
+  # micrófono no compita con el altavoz.
+  from Voz_Slide import Ducking
+  with sr.Microphone(device_index=microfono_encontrado) as source, \
+       Ducking.mientras(Ducking.FACTOR_ESCUCHA):
     if not _calibrado:
         print("Calibrando microfono (solo la primera vez)...")
         instancia.adjust_for_ambient_noise(source, duration=0.5)

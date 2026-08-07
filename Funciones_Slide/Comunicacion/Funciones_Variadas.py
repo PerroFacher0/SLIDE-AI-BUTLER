@@ -219,6 +219,15 @@ def Auto_Modificacion(nombre_habilidad, instruccion):
                 )
                 return
             importlib.reload(Auto_Programacion)
+            # La prueba se GUARDA. Hasta ahora se usaba una vez y se tiraba, así que una habilidad
+            # quedaba validada para siempre por una comprobacion del dia que nacio: si algo de lo
+            # que usa cambiaba despues, nadie se enteraba. Guardada, el mantenimiento en reposo
+            # puede volver a correrla cuando la PC esta sin usar.
+            try:
+                from Nucleo_Slide.Reposo import registrar_habilidad
+                registrar_habilidad(nombre_habilidad, instruccion, prueba)
+            except Exception:
+                pass
             hablado_del_asistente("Senor, habilidad adquirida y probada: " + nombre_habilidad + ".")
         except subprocess.TimeoutExpired:
             hablado_del_asistente("Senor, programar " + nombre_habilidad + " tardo demasiado y lo detuve.")

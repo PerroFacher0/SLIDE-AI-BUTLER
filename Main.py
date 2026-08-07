@@ -49,6 +49,7 @@ from Funciones_Slide.Info.Bitacora import resumen_priorizado
 # con Main_AlwaysOn.py: cada arreglo aplica a los dos a la vez (antes estaba duplicado y divergía).
 from Nucleo_Slide.Peticiones import Procesar_Peticion, Voz
 from Nucleo_Slide.Freno_Duro import iniciar as iniciar_freno_duro
+from Nucleo_Slide.Reposo import iniciar_reposo
 
 # El freno duro arranca ANTES QUE NADA — antes de los hilos, del login facial y de Telegram. Es el
 # único módulo cuyo valor depende de estar disponible cuando lo demás falla: si se colgara el
@@ -89,6 +90,9 @@ if verificacion == "Bienvenido Marco":
     iniciar_vigilante_portapapeles(hablado_del_asistente)  # reacciona a lo que copias (error/YouTube)
     iniciar_vigilante_eventos(hablado_del_asistente)   # USB conectado / descarga terminada
     iniciar_memoria_visual()                           # pasado visual de la pantalla (APAGADA por defecto)
+    # Mantenimiento cuando Marco lleva rato sin tocar la PC. NO es otro reloj: el disparador
+    # es su ausencia, y se corta en cuanto vuelve.
+    iniciar_reposo()
     # Deja una sesión de PowerShell ya arrancada: el primer comando del día no paga los ~2s de
     # arranque. Si falla, ejecutar_en_pc sigue funcionando por el camino de siempre.
     precalentar_ps()
