@@ -359,19 +359,287 @@ def _localizar_visual(page, descripcion):
         return None
 
 
+# ── RAYOS X DE LA PÁGINA: numerar lo interactivo ─────────────────────────────
+#
+# Lo mismo que ya existe en el escritorio (Control_Pantalla._listar_clicables), traído aquí porque
+# la estructura era la misma: nombre primero, visión de respaldo. Esto es el TERCER camino, y las
+# constantes se IMPORTAN de allá en vez de copiarlas — dos números que significan lo mismo en dos
+# archivos acaban divergiendo, y ya hubo un bug así en este proyecto.
+from Funciones_Slide.Sistema.Control_Pantalla import _MAX_INDICES, _VIDA_INDICES
+
+_ROLES = ("button", "link", "textbox", "combobox")   # los mismos que ya usa _localizar_semantico
+
+# Se guardan las coordenadas del VIEWPORT, no las de pantalla: el clic lo hace Playwright con
+# coordenadas del viewport, así que mover la ventana de Chrome no puede desviar un clic. Las de
+# pantalla existen solo para DIBUJAR los números, y para eso sí hace falta saber dónde está la
+# ventana.
+_indices_web = {"lista": [], "en": 0.0, "ventana": None}
+
+
+# Un verde imposible de encontrar por accidente en una web. Se pinta el viewport entero de este
+# color durante un instante para MEDIR dónde cae en pantalla.
+_COLOR_REGLA = (1, 254, 3)
+_calibracion = {"ventana": None, "geo": None}
+
+
+def _geometria_contenido(page):
+    """Cómo pasar de coordenadas del viewport a píxeles reales de pantalla.
+
+    Devuelve (origen_x, origen_y, escala), o None si no se puede saber con certeza — y entonces no
+    se dibuja nada, que es preferible a dibujar números desplazados.
+
+    ── POR QUÉ SE MIDE Y NO SE CALCULA ──
+    El intento obvio es restar: la ventana la da Windows en píxeles físicos, y la página dice su
+    propio tamaño (innerWidth/innerHeight), así que el marco y la barra de direcciones salen de la
+    diferencia. Medido contra píxeles reales, eso daba 21 px de desvío vertical, y la causa es que
+    Playwright EMULA el viewport: innerHeight es el tamaño que se le pidió, no el área que Chrome
+    pinta de verdad. Restar dos cosas que parecen la misma y no lo son.
+
+    Así que se mide: se pinta el viewport entero de un color imposible durante un instante, se
+    mira la pantalla y se ve exactamente dónde cayó ese rectángulo. Eso ES el área de contenido, en
+    píxeles físicos, sin suponer nada sobre el alto de la barra de direcciones ni sobre el DPI.
+
+    Se cachea por posición de ventana: solo se vuelve a medir si Marco la movió o la redimensionó."""
+    hwnd = _hwnd_del_navegador()
+    if not hwnd:
+        return None
+    try:
+        import win32gui
+        ventana = win32gui.GetWindowRect(hwnd)
+    except Exception:
+        return None
+    if _calibracion["ventana"] == ventana and _calibracion["geo"]:
+        return _calibracion["geo"]
+
+    try:
+        import numpy as np
+        from PIL import ImageGrab
+        iw = page.evaluate("() => window.innerWidth")
+        if not iw:
+            return None
+        page.evaluate("""(c) => {
+            const d = document.createElement('div');
+            d.id = '__aiden_regla__';
+            d.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+                            + 'z-index:2147483647;pointer-events:none;background:rgb('+c+')';
+            document.documentElement.appendChild(d);
+        }""", ",".join(str(v) for v in _COLOR_REGLA))
+        page.wait_for_timeout(120)          # que alcance a pintarse antes de la foto
+        foto = ImageGrab.grab(all_screens=True)
+        page.evaluate("() => { const d = document.getElementById('__aiden_regla__');"
+                      " if (d) d.remove(); }")
+    except Exception:
+        try:
+            page.evaluate("() => { const d = document.getElementById('__aiden_regla__');"
+                          " if (d) d.remove(); }")
+        except Exception:
+            pass
+        return None
+
+    try:
+        a = np.array(foto.convert("RGB"))
+        r, g_, b = _COLOR_REGLA
+        m = ((abs(a[:, :, 0].astype(int) - r) < 24) & (abs(a[:, :, 1].astype(int) - g_) < 24)
+             & (abs(a[:, :, 2].astype(int) - b) < 24))
+        ys, xs = m.nonzero()
+        if len(xs) < 400:
+            # No se ve: la ventana está tapada, minimizada o en otro escritorio. No se inventa una
+            # posición — simplemente no habrá números dibujados (el clic por índice sigue bien).
+            return None
+        # El escritorio virtual puede empezar en negativo si hay un monitor a la izquierda; la
+        # captura arranca en su esquina, no en (0,0).
+        ox_v, oy_v = _origen_virtual()
+        x1, x2 = int(xs.min()) + ox_v, int(xs.max()) + ox_v
+        y1, y2 = int(ys.min()) + oy_v, int(ys.max()) + oy_v
+    except Exception:
+        return None
+
+    escala = (x2 - x1 + 1) / float(iw)
+    if not (0.3 < escala < 4.0):
+        return None
+    geo = (float(x1), float(y1), escala)
+    _calibracion["ventana"], _calibracion["geo"] = ventana, geo
+    return geo
+
+
+def _origen_virtual():
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        return u.GetSystemMetrics(76), u.GetSystemMetrics(77)   # SM_X/YVIRTUALSCREEN
+    except Exception:
+        return 0, 0
+
+
+def _listar_interactivos(page, tope=_MAX_INDICES):
+    """Los elementos interactivos VISIBLES de la página, en orden de aparición.
+
+    Ojo con is_visible() de Playwright: dice si el CSS lo muestra, no si está en pantalla. Un
+    elemento en `left:-9999px` —el truco de toda la vida para esconder cosas— pasa ese filtro y se
+    colaría en la lista. Numerar algo que Marco no ve rompe justamente lo que la numeración promete:
+    que el número que dice es el que está mirando. Por eso además se comprueba el viewport."""
+    try:
+        vp = page.viewport_size or {}
+        ancho_vp = float(vp.get("width") or page.evaluate("() => window.innerWidth"))
+        alto_vp = float(vp.get("height") or page.evaluate("() => window.innerHeight"))
+    except Exception:
+        ancho_vp = alto_vp = 0.0
+
+    fuera, vistos = [], set()
+    for rol in _ROLES:
+        if len(fuera) >= tope:
+            break
+        try:
+            locs = page.get_by_role(rol).all()
+        except Exception:
+            continue
+        for loc in locs:
+            if len(fuera) >= tope:
+                break
+            try:
+                if not loc.is_visible(timeout=200):
+                    continue
+                caja = loc.bounding_box()
+                if not caja or caja["width"] < 4 or caja["height"] < 4:
+                    continue
+                cx = caja["x"] + caja["width"] / 2.0
+                cy = caja["y"] + caja["height"] / 2.0
+                if ancho_vp and not (0 <= cx <= ancho_vp and 0 <= cy <= alto_vp):
+                    continue                  # está fuera de lo que Marco ve ahora mismo
+                clave = (int(cx), int(cy))
+                if clave in vistos:            # un enlace dentro de un botón: cuenta una vez
+                    continue
+                vistos.add(clave)
+                nombre = ""
+                try:
+                    nombre = (loc.inner_text(timeout=200) or "").strip().replace("\n", " ")[:60]
+                except Exception:
+                    pass
+                if not nombre:
+                    for attr in ("aria-label", "placeholder", "value", "title"):
+                        try:
+                            v = loc.get_attribute(attr, timeout=150)
+                        except Exception:
+                            v = None
+                        if v:
+                            nombre = str(v).strip()[:60]
+                            break
+                fuera.append({"x": cx, "y": cy, "nombre": nombre, "rol": rol})
+            except Exception:
+                continue
+    return fuera
+
+
+def mostrar_elementos():
+    """Numera lo interactivo de la página y devuelve la lista. La usa el mini-agente cuando no
+    encuentra algo por su descripción — no es un parámetro nuevo de navegar_web."""
+    page = _asegurar_navegador()
+    elementos = _listar_interactivos(page)
+    if not elementos:
+        return "No hay elementos interactivos visibles en esta página."
+
+    geo = _geometria_contenido(page)
+    ventana = None
+    if geo:
+        ox, oy, esc = geo
+        try:
+            import win32gui
+            ventana = win32gui.GetWindowRect(_hwnd_del_navegador())
+            from Interfaz import Mira
+            Mira.mostrar_indices([(ox + e["x"] * esc, oy + e["y"] * esc) for e in elementos],
+                                 _VIDA_INDICES)
+        except Exception:
+            ventana = None
+    # Si la geometría no se pudo establecer, la lista SIGUE sirviendo para clicar (eso usa
+    # coordenadas del viewport). Lo único que se pierde son los números dibujados.
+    with _lock:
+        _indices_web["lista"] = elementos
+        _indices_web["en"] = time.time()
+        _indices_web["ventana"] = ventana
+
+    lineas = [f"{i}. [{e['rol']}] {e['nombre'] or '(sin texto)'}"
+              for i, e in enumerate(elementos, 1)]
+    return f"{len(elementos)} elementos numerados en pantalla:\n" + "\n".join(lineas)
+
+
+def _olvidar_indices_web():
+    with _lock:
+        _indices_web["lista"], _indices_web["en"], _indices_web["ventana"] = [], 0.0, None
+    try:
+        from Interfaz import Mira
+        Mira.ocultar_indices()
+    except Exception:
+        pass
+
+
+def _por_indice_web(descripcion):
+    """El elemento que Marco (o el mini-agente) llamó por su número, o None.
+
+    Caduca igual que en el escritorio, y por lo mismo: los números se dibujaron sobre una página
+    que pudo navegar o cambiar. Un índice viejo debe fallar con claridad, no clicar a ciegas en el
+    lugar equivocado con toda la confianza."""
+    txt = str(descripcion or "").strip().lstrip("#").rstrip(".")
+    if not txt.isdigit():
+        return None
+    with _lock:
+        lista, en, ventana = list(_indices_web["lista"]), _indices_web["en"], _indices_web["ventana"]
+    if not lista or (time.time() - en) > _VIDA_INDICES:
+        return None
+    n = int(txt)
+    if not (1 <= n <= len(lista)):
+        return None
+    # Si la ventana se movió o cambió de tamaño, los números DIBUJADOS ya no coinciden con lo que
+    # Marco ve. El clic seguiría siendo correcto (va por viewport), pero Marco eligió mirando unos
+    # números que ahora mienten, así que se descarta: la elección era suya, no del código.
+    if ventana:
+        try:
+            import win32gui
+            if win32gui.GetWindowRect(_hwnd_del_navegador()) != ventana:
+                _olvidar_indices_web()
+                return None
+        except Exception:
+            pass
+    return lista[n - 1]
+
+
 # ── Acciones (nombre primero, visión de respaldo — mismo patrón que el escritorio) ─────────────
 def clic_en(descripcion):
     """HERRAMIENTA: hace clic en 'descripcion' (un botón, enlace o elemento) dentro de la página
     actual. Primero por su rol/nombre accesible (instantáneo); si no lo encuentra, lo ubica VIENDO
     la página. Bloquea el clic si detecta que es un botón de PAGO/CONFIRMAR PEDIDO final."""
     page = _asegurar_navegador()
-    if _es_boton_de_pago(descripcion) and estado_pagina().get("es_pago_final"):
+
+    # El índice se resuelve ANTES del freno de pagos, y a propósito. "3" no contiene la palabra
+    # "pagar", así que preguntarle al freno por el número dejaría pasar justo lo que el freno
+    # existe para parar: el botón de pago, numerado. Se traduce el número a su TEXTO y se frena
+    # sobre ese texto, igual que si el mini-agente lo hubiera descrito.
+    elegido = _por_indice_web(descripcion)
+    para_frenar = (elegido["nombre"] if elegido else descripcion)
+
+    if _es_boton_de_pago(para_frenar) and estado_pagina().get("es_pago_final"):
         _marcar_ventana("Pantalla de pago — diga «confirma el pago» para continuar")
         return ("Me detengo, señor: esto parece confirmar un PAGO o pedido final. No lo hago sin "
                 "que usted lo autorice explícitamente por voz. Dígame 'confirma el pago' si de "
                 "verdad quiere seguir.")
     # Cualquier clic que SÍ se hace significa que lo de antes se resolvió: el ancla sobra.
     _desmarcar_ventana()
+
+    if elegido:
+        # Se clica por coordenadas del VIEWPORT, que es lo que guardó la lista: así el clic es
+        # correcto aunque la ventana de Chrome se haya movido entre enumerar y elegir.
+        try:
+            page.mouse.click(elegido["x"], elegido["y"])
+            _olvidar_indices_web()          # la página cambió: los números ya no valen
+            return f"Hice clic en «{elegido['nombre'] or descripcion}», señor (era el {descripcion})."
+        except Exception as e:
+            _olvidar_indices_web()
+            return f"No pude hacer clic en el {descripcion}, señor: {e}"
+    if str(descripcion).strip().isdigit():
+        # Pidió un número pero la lista ya no vale. Se dice CLARO en vez de caer a buscar "3" como
+        # si fuera texto, que encontraría cualquier cosa que contenga un 3.
+        return (f"Ese número ya no vale, señor: la lista caducó o la página cambió. "
+                "Vuelvo a numerar los elementos si quiere.")
+
     loc = _localizar_semantico(page, descripcion)
     if loc is not None:
         try:
@@ -507,6 +775,7 @@ def ir_a(destino):
     d = str(destino or "").strip()
     if not d:
         return "¿A dónde navego, señor?"
+    _olvidar_indices_web()      # otra página: los números de la anterior no significan nada aquí
     if re.match(r"^[a-z][a-z0-9+.-]*://", d, re.I):     # ya trae un esquema (http/https/file/...)
         url = d
     elif "." in d.split()[0] and " " not in d.split()[0]:
@@ -752,7 +1021,7 @@ _FUNCIONES_WEB = {
     "cerrar_popups": cerrar_popups, "explorar_y_resumir": explorar_y_resumir,
     "mantener_cursor_en": mantener_cursor_en, "arrastrar_de_a": arrastrar_de_a,
     "anotar_nota": anotar_nota, "estado_pagina": estado_pagina,
-    "pedir_a_marco": pedir_a_marco,
+    "pedir_a_marco": pedir_a_marco, "mostrar_elementos": mostrar_elementos,
     "subir_archivo": subir_archivo, "descargar_archivo": descargar_archivo,
 }
 
@@ -760,7 +1029,11 @@ _SISTEMA_WEB = (
     "Eres AIDEN navegando la web por Marco. Cumple su objetivo paso a paso usando SOLO estas "
     "herramientas de navegador (ir_a, clic_en, escribir_en, cerrar_popups, explorar_y_resumir, "
     "mantener_cursor_en, arrastrar_de_a, anotar_nota, estado_pagina, pedir_a_marco, "
-    "subir_archivo, descargar_archivo). "
+    "mostrar_elementos, subir_archivo, descargar_archivo). "
+    "Si clic_en no encuentra algo por su descripción, usa mostrar_elementos: numera lo interactivo "
+    "de la página y te devuelve la lista; después pasa el NÚMERO a clic_en ('3') y va directo. "
+    "Esos números CADUCAN: si navegaste o pasó un rato, vuelve a numerar en vez de reusar el "
+    "número viejo. "
     "Si hay que ADJUNTAR un archivo del PC usa subir_archivo con su nombre; si hay que BAJAR algo "
     "usa descargar_archivo y luego di dónde quedó. Ninguna de las dos salta el freno de pagos. "
     "Si la página pide un CÓDIGO DE VERIFICACIÓN (2FA) que le llegó al teléfono a Marco, o un dato "

@@ -395,6 +395,51 @@ el modelo elija bien, y este proyecto ya decidió pagar tokens por precisión.
 
 ---
 
+## D27 — Rayos X en la web: el mismo patrón, y dos suposiciones que la medición tumbó
+
+Se extiende la numeración de elementos (D24) al navegador agéntico. Misma disciplina: tercer
+camino, caduca a los 20 s, se borra al primer clic. Las constantes se **importan** de
+`Control_Pantalla` en vez de copiarse — dos números que significan lo mismo en dos archivos acaban
+divergiendo, que es la lección de D22.
+
+**El agujero que había que cerrar antes de nada.** El freno de pagos compara la *descripción* con
+un patrón de texto. Un número no contiene la palabra "pagar": preguntarle al freno por `"3"` habría
+dejado pasar justo lo que existe para parar, **el botón de pago numerado**. Por eso el índice se
+resuelve **antes** del freno y lo que se frena es el **texto** del elemento elegido. Verificado
+extremo a extremo: pedir el clic sobre el número del botón *"Confirmar pedido"* en una página con
+total y precio **se bloquea igual**.
+
+**El clic va por coordenadas del viewport, no de pantalla.** Playwright clica en el viewport, así
+que mover la ventana de Chrome entre numerar y elegir **no puede desviar un clic**. Las coordenadas
+de pantalla existen solo para dibujar los números. Aun así, si la ventana se movió la lista se
+descarta: Marco eligió mirando unos números que ya mienten, y esa elección era suya.
+
+**Dos suposiciones mías que los píxeles tumbaron:**
+
+1. **`outerHeight - innerHeight` NO da el alto de la barra de direcciones.** Parecía obvio: la
+   ventana la da Windows en píxeles físicos, la página dice su propio tamaño, la diferencia es el
+   marco. Medido contra la pantalla: **21 px de desvío vertical**. La causa es que Playwright
+   *emula* el viewport — `innerHeight` es el tamaño que se le pidió, no el área que Chrome pinta.
+   Restar dos cosas que parecen la misma y no lo son.
+   **Se reemplazó por una medida**: se pinta el viewport entero de un color imposible durante un
+   instante y se mira dónde cayó en pantalla. Eso *es* el área de contenido, sin suponer nada sobre
+   el DPI ni sobre la altura de las pestañas. Desvío tras el cambio: **1 px horizontal, 6 vertical**.
+   Se cachea por posición de ventana; solo se remide si Marco la mueve.
+
+2. **`is_visible()` de Playwright no significa "se ve en pantalla".** Dice si el CSS lo muestra. Un
+   elemento en `left:-9999px` —el truco de toda la vida para esconder cosas— pasaba el filtro y se
+   colaba en la lista. Numerar algo que Marco no ve rompe justo lo que la numeración promete: que
+   el número que dice es el que está mirando. Ahora se comprueba además el viewport.
+
+**Si no se puede medir, no se dibuja.** Ventana tapada, minimizada o en otro escritorio → no hay
+números. El clic por índice sigue funcionando igual, porque no dependía de eso.
+
+**La interfaz pública no cambia.** `navegar_web(objetivo)` sigue teniendo un solo parámetro; quien
+decide cuándo numerar es el mini-agente interno, igual que ya decidía entre semántico y visión.
+Seguimos en 59 herramientas.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],
