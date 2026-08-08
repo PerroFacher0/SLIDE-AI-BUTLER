@@ -142,14 +142,36 @@ def contexto_del_turno(consulta=""):
     t = str(consulta or "").lower()
     trozos = []
 
-    # 1) ¿Habla de lo que TIENE DELANTE sin decir qué es? Se le avisa; mirar lo decide él.
+    # 1) ¿Habla de lo que TIENE DELANTE sin decir qué es?
+    #
+    # Aquí hay DOS formas de enterarse y una es mucho mejor que la otra. Si AIDEN acaba de ejecutar
+    # algo que falló, tiene el stderr EXACTO en memoria: texto literal, gratis, sin ambigüedad.
+    # Mirar la pantalla para leer ese mismo error sería sacarle una foto a un papel que ya tiene en
+    # la mano — cuesta una captura, una llamada a Vision, un par de segundos, y encima puede leerlo
+    # mal. Así que el texto GANA siempre que exista y sea reciente; la visión queda para cuando no
+    # hay texto, que es la mayoría de las veces (un error del IDE, algo que Marco abrió él).
     if apunta_a_la_pantalla(consulta):
-        trozos.append(
-            "AVISO: la frase de Marco no dice a QUÉ se refiere, y lo normal es que sea algo que "
-            "tiene EN PANTALLA. Tu primera acción debe ser analizar(fuente='pantalla') para verlo "
-            "— no le preguntes a qué se refiere. Si al mirarlo resulta que no era eso, sigue con "
-            "lo que sí encaje."
-        )
+        delta = None
+        try:
+            from Nucleo_Slide.Ultimo_Error import reciente
+            delta = reciente()
+        except Exception:
+            delta = None
+        if delta:
+            texto, de, edad = delta
+            trozos.append(
+                f"EL ÚLTIMO ERROR (lo tienes literal, de {de}, hace {int(edad)}s). Marco pregunta "
+                "algo vago y casi seguro habla de esto. Respóndele con este texto: NO hace falta "
+                f"analizar la pantalla ni pedirle que lo copie.\n{texto}\n"
+                "Si al leerlo ves que no era de esto que hablaba, entonces sí mira la pantalla."
+            )
+        else:
+            trozos.append(
+                "AVISO: la frase de Marco no dice a QUÉ se refiere, y lo normal es que sea algo "
+                "que tiene EN PANTALLA. Tu primera acción debe ser analizar(fuente='pantalla') "
+                "para verlo — no le preguntes a qué se refiere. Si al mirarlo resulta que no era "
+                "eso, sigue con lo que sí encaje."
+            )
 
     # 2) ¿Habla de lo que tiene COPIADO? (el resumen de siempre solo lleva 100 caracteres)
     if any(p in t for p in _APUNTA_AL_CLIP):

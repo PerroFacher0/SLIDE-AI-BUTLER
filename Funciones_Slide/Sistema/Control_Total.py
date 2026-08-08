@@ -97,6 +97,24 @@ def _parece_pregunta(cola):
     return any(re.search(p, t) for p in _PREGUNTAS)
 
 
+def _guardar_delta(comando, descripcion, error, fallo):
+    """Deja el error a mano por si Marco pregunta después.
+
+    Vive aquí y no en cada return porque los DOS caminos de ejecución —la sesión caliente y el
+    proceso suelto— acaban en la misma forma, y dos copias de esto acabarían divergiendo.
+
+    Se guarda el COMANDO junto al error: sin él, un «no such file» a secas no le dice nada al
+    modelo dos minutos después. Y nunca tumba una ejecución: si esto falla, el comando ya corrió."""
+    try:
+        if not fallo or not str(error or "").strip():
+            return False
+        from Nucleo_Slide.Ultimo_Error import recordar
+        que = (descripcion or comando or "")[:120]
+        return recordar(f"Al ejecutar «{que}»:\n{error}", "ejecutar_en_pc")
+    except Exception:
+        return False
+
+
 def _matar_arbol(proc):
     # Mata el proceso Y sus hijos: PowerShell suele lanzar sub-procesos que sobreviven al padre.
     try:
@@ -257,11 +275,19 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     envoltorio = (
         "Remove-Variable * -Scope Global -Force -ErrorAction SilentlyContinue; "
         f"Set-Location -LiteralPath '{_carpeta_actual()}'; $Error.Clear(); "
+        # Se pone a cero ANTES: en una sesión caliente $LASTEXITCODE sobrevive de un comando al
+        # siguiente, y sin esto un fallo viejo se le atribuiría al comando nuevo.
+        "$global:LASTEXITCODE=0; "
         f"Invoke-Expression ([Text.Encoding]::Unicode.GetString("
         f"[Convert]::FromBase64String('{b64}'))); "
-        # La marca se lleva de paso el nº de errores y la carpeta donde quedó el comando, así no
-        # hace falta un segundo delimitador ni ensuciar la salida que ve Marco.
-        f"Write-Output \"{_MARCA}$($Error.Count)|$((Get-Location).Path)\"\n"
+        # La marca se lleva de paso el nº de errores, la carpeta donde quedó el comando y el código
+        # de salida, así no hace falta un segundo delimitador ni ensuciar la salida que ve Marco.
+        #
+        # El código de salida hace falta además del contador de errores porque miden cosas
+        # distintas: $Error.Count cuenta errores DE POWERSHELL, y no se entera de que `python` o
+        # `pip` devolvieron 1. Sin él, un traceback de Python se veía en la salida pero constaba
+        # como comando correcto.
+        f"Write-Output \"{_MARCA}$($Error.Count)|$((Get-Location).Path)|$LASTEXITCODE\"\n"
     )
     try:
         proc.stdin.write(envoltorio)
@@ -351,16 +377,29 @@ def _en_sesion(comando, descripcion, pendientes, por_defecto, timeout):
     antes, _, despues = bruto.partition(_MARCA)
     salida = antes.strip()
     cabecera = despues.strip().split("\n")[0]
-    n_txt, _, carpeta = cabecera.partition("|")
+    # "3|C:\ruta|1" — la carpeta sigue en el mismo sitio que siempre; el código de salida se añadió
+    # al final para no mover nada. Con menos partes (una sesión vieja), se degrada sin romperse.
+    partes = cabecera.split("|")
+    n_txt = partes[0] if partes else "0"
+    carpeta = partes[1] if len(partes) > 1 else ""
+    cod_txt = partes[2] if len(partes) > 2 else ""
     try:
         n_errores = int(n_txt.strip() or 0)
     except ValueError:
         n_errores = 0
+    try:
+        codigo = int(cod_txt.strip() or 0)
+    except ValueError:
+        codigo = 0
     _recordar_carpeta(carpeta.strip())
 
     _term("cerrar", not (n_errores and error))
     _registrar(descripcion, comando)
     nota = _nota_preguntas(contestadas)
+    # Fallo = error de PowerShell O código de salida distinto de cero. Lo segundo es lo que
+    # detecta que `python`, `pip` o `git` reventaron; sin ello el traceback aparecía en la
+    # respuesta pero no se guardaba.
+    _guardar_delta(comando, descripcion, error, n_errores or codigo)
     if n_errores and error:
         return f"El comando terminó con error, señor{nota}: {error[:400]}{_nota_permisos(error)}"
     if not salida and not error:
@@ -633,6 +672,7 @@ def ejecutar_en_pc(comando, descripcion="", respuestas="", timeout=45):
         pass
 
     nota = f" (le contesté {contestadas} pregunta{'s' if contestadas != 1 else ''})" if contestadas else ""
+    _guardar_delta(comando, descripcion, error, proc.returncode)
     if proc.returncode != 0 and error:
         return f"El comando terminó con error, señor{nota}: {error[:400]}"
     if not salida and not error:

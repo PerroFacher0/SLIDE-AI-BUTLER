@@ -770,6 +770,60 @@ aviso va en la parte **volátil** del prompt, así que no toca el prefijo cachea
 
 ---
 
+## D36 — El último error viaja como texto (y la Fase B: no)
+
+Cuando AIDEN ejecuta algo y falla, **tiene el stderr exacto en la mano**. Pero se lo daba al modelo
+en ese turno y se perdía. Si Marco preguntaba medio minuto después *"¿y por qué falló?"*, AIDEN
+acababa sacándole una foto a la pantalla y mandándosela a Gemini Vision **para leer un texto que
+había tenido en una variable**.
+
+### Fase A — hecha
+
+`Nucleo_Slide/Ultimo_Error.py`, y lo único que hace es guardar. Tres reglas lo mantienen
+inofensivo, y las tres están verificadas con AST, no de palabra:
+
+1. **Una sola entrada.** El error nuevo pisa al viejo. Si fuera una lista, en un día de trabajo
+   sería un registro de todo lo que le ha salido mal a Marco — justo lo que este proyecto decidió
+   no tener.
+2. **Nunca toca el disco.** Solo importa `threading` y `time`; ni `os`, ni `json`, ni `sqlite3`.
+3. **Caduca a los 5 min.** Contestarle con confianza sobre el error equivocado es peor que decirle
+   que mire.
+
+**El texto gana a la visión.** Cuando la pregunta vaga llega (misma detección de D35, no se
+duplicó), si hay texto reciente va el texto y se le dice explícitamente que **no** mire la
+pantalla; si no lo hay, cae a `analizar` como hasta ahora. La visión queda para lo que el texto no
+cubre — un error del IDE, algo que Marco abrió él.
+
+**El bug que cazó la prueba extremo a extremo, y era gordo.** Enganché el guardado a
+`$Error.Count`, el contador de errores **de PowerShell** — que no se entera de que `python`, `pip`
+o `git` devolvieron 1. Un traceback de Python aparecía en la respuesta pero constaba como comando
+correcto, así que **nunca se guardaba**: justo el caso más común. Arreglado leyendo `$LASTEXITCODE`
+además del contador — poniéndolo a cero antes de cada comando, porque en una sesión caliente
+sobrevive de uno al siguiente y un fallo viejo se le atribuiría al nuevo.
+
+### Fase B — investigada y descartada, con datos
+
+**(b) Diagnósticos de VS Code sin escribir una extensión: no existen en disco.** Revisé las 3 bases
+`state.vscdb` del `workspaceStorage` — 86 claves, y las que suenan a errores
+(`workbench.panel.markers`) guardan **estado de la interfaz**, no los diagnósticos:
+`{"collapsed":false,"isHidden":true}`. Son de memoria. La única vía es una extensión, que el propio
+encargo excluye.
+
+**(a) Hook del perfil de PowerShell: no.** Su `$PROFILE` apunta a
+`OneDrive\Documents\WindowsPowerShell\...` y **no existe**. Crearlo significa un archivo nuevo
+sincronizado a la nube de Microsoft, que además tendría que **escribir a disco** cada stderr para
+que AIDEN lo lea — contradice de frente la regla 2 de arriba. Y correría en cada shell que Marco
+abra, siempre: eso *es* registro continuo, exactamente lo que rechazó.
+
+**(c) Mirar la ventana activa: ya está hecho, y se llama `analizar`.** Es literalmente el camino
+que D35 dispara cuando no hay texto. Implementarlo otra vez sería duplicarlo peor.
+
+**La Fase A sola ya es la mejora real:** cubre el caso más frecuente —lo que AIDEN mismo
+ejecuta— con texto literal y gratis, sin añadir ni una herramienta (siguen 59), ni un hilo, ni un
+byte en disco.
+
+---
+
 ### Para la wiki
 - Crear una **página de decisión por cada D#**, enlazada a sus conceptos/entidades.
 - Conceptos centrales que emergen: [[modelo de dos niveles]], [[escalada de temperatura]],
